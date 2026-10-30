@@ -1,0 +1,13 @@
+# C++ compiler outputs
+*.o
+*.obj
+*.exe
+*.out
+
+# Test executables
+test_bitmap
+test_hash_map
+
+# Build directories
+build/
+cmake-build-*/
