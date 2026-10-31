@@ -1,81 +1,5 @@
-#ifndef B6_SCHEDULER_DS_HASH_MAP_H
-#define B6_SCHEDULER_DS_HASH_MAP_H
+#include "../include/hash_map.h"
 
-#include <cstddef>
-#include <cstdint>
-
-// Integer-key chained map storing non-owning pointers, such as TCBs. 
-template <typename T>
-class HashMap {
-public:
-    HashMap();
-
-    HashMap(const HashMap& other);
-
-    HashMap(HashMap&& other) noexcept;
-
-    ~HashMap();
-
-    HashMap& operator=(const HashMap& other);
-
-    HashMap& operator=(HashMap&& other) noexcept;
-
-    // Inserts or updates a value, O(1) average. 
-    bool put(int key, T* value);
-
-    // Returns the value pointer, O(1) average. 
-    T* get(int key) const;
-
-    // Removes a key and reports whether it existed. O(1) average. 
-    bool remove(int key);
-
-    // Checks key existence. 
-    bool contains(int key) const;
-
-    std::size_t size() const;
-
-    std::size_t bucketCount() const;
-
-    // Rebuilds buckets while preserving entries. O(n). 
-    void resize(std::size_t requestedBucketCount);
-
-    // Alias for resize. 
-    void rehash(std::size_t requestedBucketCount);
-
-    // Removes every entry but retains the buckets. 
-    void clear();
-
-    // Custom integer hash function. 
-    static std::size_t hash(int key);
-
-private:
-    // Collision-chain node; it does not own value.
-    struct Node {
-        int key;
-        T* value;
-        Node* next;
-
-        Node(int entryKey, T* entryValue, Node* nextNode)
-            : key(entryKey), value(entryValue), next(nextNode) {}
-    };
-
-    static constexpr std::size_t kInitialBucketCount = 8;
-
-    // Heads of the collision chains.
-    Node** buckets_;
-    std::size_t bucketCount_;
-    std::size_t size_;
-
-    Node* findNode(int key) const;
-
-    std::size_t bucketIndex(int key) const;
-
-    void deleteNodes();
-
-    void release();
-
-    static std::size_t normalizedBucketCount(std::size_t requestedBucketCount);
-};
 
 template <typename T>
 HashMap<T>::HashMap()
@@ -104,9 +28,7 @@ HashMap<T>::HashMap(HashMap&& other) noexcept
 }
 
 template <typename T>
-HashMap<T>::~HashMap() {
-    release();
-}
+HashMap<T>::~HashMap() { release(); }
 
 template <typename T>
 HashMap<T>& HashMap<T>::operator=(const HashMap& other) {
@@ -136,17 +58,14 @@ bool HashMap<T>::put(int key, T* value) {
     if (bucketCount_ == 0) {
         resize(kInitialBucketCount);
     }
-
     Node* existing = findNode(key);
     if (existing != nullptr) {
         existing->value = value;
         return false;
     }
-
     if ((size_ + 1) * 4 > bucketCount_ * 3) {
         resize(bucketCount_ * 2);
     }
-
     const std::size_t bucket = bucketIndex(key);
     buckets_[bucket] = new Node(key, value, buckets_[bucket]);
     ++size_;
@@ -164,7 +83,6 @@ bool HashMap<T>::remove(int key) {
     if (bucketCount_ == 0) {
         return false;
     }
-
     const std::size_t bucket = bucketIndex(key);
     Node* previous = nullptr;
     Node* current = buckets_[bucket];
@@ -186,19 +104,13 @@ bool HashMap<T>::remove(int key) {
 }
 
 template <typename T>
-bool HashMap<T>::contains(int key) const {
-    return findNode(key) != nullptr;
-}
+bool HashMap<T>::contains(int key) const { return findNode(key) != nullptr; }
 
 template <typename T>
-std::size_t HashMap<T>::size() const {
-    return size_;
-}
+std::size_t HashMap<T>::size() const { return size_; }
 
 template <typename T>
-std::size_t HashMap<T>::bucketCount() const {
-    return bucketCount_;
-}
+std::size_t HashMap<T>::bucketCount() const { return bucketCount_; }
 
 template <typename T>
 void HashMap<T>::resize(std::size_t requestedBucketCount) {
@@ -206,7 +118,6 @@ void HashMap<T>::resize(std::size_t requestedBucketCount) {
     if (newBucketCount == bucketCount_ && buckets_ != nullptr) {
         return;
     }
-
     Node** newBuckets = new Node*[newBucketCount]{};
     for (std::size_t bucket = 0; bucket < bucketCount_; ++bucket) {
         Node* current = buckets_[bucket];
@@ -218,21 +129,16 @@ void HashMap<T>::resize(std::size_t requestedBucketCount) {
             current = next;
         }
     }
-
     delete[] buckets_;
     buckets_ = newBuckets;
     bucketCount_ = newBucketCount;
 }
 
 template <typename T>
-void HashMap<T>::rehash(std::size_t requestedBucketCount) {
-    resize(requestedBucketCount);
-}
+void HashMap<T>::rehash(std::size_t requestedBucketCount) { resize(requestedBucketCount); }
 
 template <typename T>
-void HashMap<T>::clear() {
-    deleteNodes();
-}
+void HashMap<T>::clear() { deleteNodes(); }
 
 template <typename T>
 std::size_t HashMap<T>::hash(int key) {
@@ -251,7 +157,6 @@ typename HashMap<T>::Node* HashMap<T>::findNode(int key) const {
     if (bucketCount_ == 0) {
         return nullptr;
     }
-
     for (Node* node = buckets_[bucketIndex(key)]; node != nullptr; node = node->next) {
         if (node->key == key) {
             return node;
@@ -261,9 +166,7 @@ typename HashMap<T>::Node* HashMap<T>::findNode(int key) const {
 }
 
 template <typename T>
-std::size_t HashMap<T>::bucketIndex(int key) const {
-    return hash(key) % bucketCount_;
-}
+std::size_t HashMap<T>::bucketIndex(int key) const { return hash(key) % bucketCount_; }
 
 template <typename T>
 void HashMap<T>::deleteNodes() {
@@ -297,5 +200,3 @@ std::size_t HashMap<T>::normalizedBucketCount(std::size_t requestedBucketCount) 
     }
     return capacity;
 }
-
-#endif  // B6_SCHEDULER_DS_HASH_MAP_H

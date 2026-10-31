@@ -1,4 +1,4 @@
-#include "../src/ds/circular_list.h"
+#include "../ds/include/circular_list.h"
 
 #include <cassert>
 
@@ -217,7 +217,7 @@ static void testNonOwningLifetime() {
 
 // Each scenario uses assertions and no external test framework. Successful
 // execution is silent; an assertion or sanitizer report identifies a failure.
-int main() {
+void test_circular_list() {
     testEmptyList();
     testSingleNode();
     testRemovePositions();
