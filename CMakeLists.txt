@@ -7,6 +7,7 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 
 add_library(data_structures
     ds/src/bitmap.cpp
+    ds/src/timing_wheel.cpp
 )
 target_include_directories(data_structures PUBLIC ds/include)
 
@@ -15,6 +16,7 @@ add_executable(test_ds
     tests/test_bitmap.cpp
     tests/test_circular_list.cpp
     tests/test_hash_map.cpp
+    tests/test_timing_wheel.cpp
 )
 target_link_libraries(test_ds PRIVATE data_structures)
 
