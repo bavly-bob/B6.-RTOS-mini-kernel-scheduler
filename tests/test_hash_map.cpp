@@ -1,4 +1,4 @@
-#include "../src/ds/hash_map.h"
+#include "../ds/include/hash_map.h"
 
 #include <cassert>
 
@@ -24,7 +24,7 @@ static void findCollidingKeys(int& first, int& second, int& third) {
 }
 
 // Tests lookup, collisions, removal, update, resizing, and a missing key. 
-int main() {
+void test_hash_map() {
     HashMap<int> map;
     int firstValue = 10;
     int secondValue = 20;

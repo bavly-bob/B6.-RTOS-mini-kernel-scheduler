@@ -1,9 +1,9 @@
-#include "../src/ds/bitmap.h"
+#include "../ds/include/bitmap.h"
 
 #include <cassert>
 
 /** Tests normal bitmap use, the required boundary bits, and invalid indices. */
-int main() {
+void test_bitmap() {
     PriorityBitmap bitmap;
 
     // An unused scheduler has no ready priority and no highest priority.
