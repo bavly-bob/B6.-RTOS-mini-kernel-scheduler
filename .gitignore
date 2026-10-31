@@ -7,6 +7,10 @@
 # Test executables
 test_bitmap
 test_hash_map
+test_circular_list
+
+# Local VS Code settings
+.vscode/
 
 # Build directories
 build/
