@@ -22,3 +22,22 @@ target_link_libraries(test_ds PRIVATE data_structures)
 
 enable_testing()
 add_test(NAME data_structures COMMAND test_ds)
+
+# Shared records and registry; scheduler/resource behavior is integrated later.
+add_library(kernel_foundation
+    kernel/src/registry.cpp
+    kernel/src/validation.cpp
+)
+target_include_directories(kernel_foundation PUBLIC kernel/include)
+target_link_libraries(kernel_foundation PUBLIC data_structures)
+
+add_executable(test_kernel_foundation tests/test_kernel_foundation.cpp)
+target_link_libraries(test_kernel_foundation PRIVATE kernel_foundation)
+add_test(NAME kernel_foundation COMMAND test_kernel_foundation)
+
+add_library(kernel_resources kernel/src/resource_manager.cpp)
+target_link_libraries(kernel_resources PUBLIC kernel_foundation)
+
+add_executable(test_resource_manager tests/test_resource_manager.cpp)
+target_link_libraries(test_resource_manager PRIVATE kernel_resources)
+add_test(NAME resource_manager COMMAND test_resource_manager)
