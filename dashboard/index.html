@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>B6 Scheduler Dashboard</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="bar">
+    <h1>B6 Scheduler Dashboard</h1>
+    <label class="button">
+      Import run(s)
+      <input id="file" type="file" accept=".json,application/json" multiple hidden>
+    </label>
+    <select id="runSelect" aria-label="Imported run" disabled>
+      <option>No run imported</option>
+    </select>
+  </header>
+
+  <p class="note">Recorded playback only: this page displays runs exported by the C++ simulator and never re-runs or recomputes the schedule. To change a setting, run the CLI again and import the new file.</p>
+  <div id="errors" role="alert"></div>
+
+  <main id="view" hidden>
+    <div id="fixtureBanner" class="fixture" hidden>SAMPLE DATA: design_fixture, hand-written for the dashboard and not produced by the engine.</div>
+
+    <section class="card">
+      <h2>Run</h2>
+      <dl id="runMeta" class="meta"></dl>
+    </section>
+
+    <section class="card">
+      <h2>Gantt chart</h2>
+      <div class="legend"><span class="sw idle"></span>idle <span class="sw dl"></span>deadline <span class="sw rel"></span>release</div>
+      <div class="scroll"><svg id="gantt" role="img" aria-label="CPU intervals per job"></svg></div>
+    </section>
+
+    <section class="card">
+      <h2>Tasks</h2>
+      <div class="scroll"><table id="tasks"></table></div>
+    </section>
+
+    <section class="card">
+      <h2>Jobs</h2>
+      <div class="scroll"><table id="jobs"></table></div>
+    </section>
+
+    <section class="card">
+      <h2>Metrics <small>(computed by C++, shown as exported)</small></h2>
+      <dl id="overall" class="meta"></dl>
+      <div class="scroll"><table id="perTask"></table></div>
+    </section>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>

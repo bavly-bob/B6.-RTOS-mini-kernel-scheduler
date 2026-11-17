@@ -25,17 +25,17 @@ public:
     TimingWheel(TimingWheel&&) = delete;
     TimingWheel& operator=(TimingWheel&&) = delete;
 
-    // Add a timer for the given process ID with the specified delay in ticks. A non-positive delay is treated as due on the next tick. O(1) allocation and link work.
+    // Add a timer for the given process ID with the specified delay in ticks. Zero is due on the next tick; negative delays are ignored. O(1) allocation and link work.
     void addTimer(int processID, int delay);
 
-    // Advance the wheel by one tick, expiring timers in the current slot. 
+    // Advance the wheel by one slot (always, even if no timers exist), expiring due timers in the new slot.
     // Returns an owning array of expired process IDs and sets expiredCount to the number of expired timers. 
     // The caller must delete[] the returned array. 
-    // O(n) where n is the number of timers in the current slot.
+    // O(n) where n is the number of timers in the new slot, including those waiting more rounds.
     int* tick(int& expiredCount);
 
-    // Remove a timer for the given process ID, if it exists. 
-    // O(n) where n is the number of timers in the current slot.
+    // Remove every timer for the given process ID, if any, from all slots.
+    // O(W + N) where W is the wheel size and N is the number of stored timers.
     void removeTimer(int processID);
     int getCurrentSlot() const;
 
