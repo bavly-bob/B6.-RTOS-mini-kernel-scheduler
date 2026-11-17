@@ -102,7 +102,7 @@ struct SemaphoreSpec {
     int maxCount = 1;
 };
 
-// The future resource manager maintains priority/sequence order in these rings.
+// ResourceManager maintains priority/sequence order in these borrowed-job rings.
 struct MutexRecord {
     ResourceId resourceId = 0;
     std::optional<JobId> ownerJobId;

@@ -6,6 +6,10 @@ handoff. It does not implement dispatch, resource operations, timers or export.
 The plan's proposals are made concrete below; team review is still needed before
 other modules adopt or change these interfaces.
 
+The next component is now implemented separately in `kernel_resources`; see
+[resource-manager.md](resource-manager.md) for operations and scheduler hooks.
+Statements below about the foundation's scope do not include that component.
+
 ## What each member uses
 
 | Consumer | Interface | Responsibility remaining with the consumer |
@@ -165,8 +169,9 @@ standard library; core collections remain custom maps/lists and built-in arrays.
 jobs, valid ID zero, null timestamps, release ordering, full 512-job capacity,
 resource script restrictions and timer ordering. Its checks stay active with NDEBUG.
 
-Next for Moataz: implement resource ownership/permit behavior and ordered waiters
-through Youssef's state-transition hooks; then producer/consumer and inversion
-oracles. No scheduler trace or dashboard evidence is claimed by this prerequisite.
+Resource ownership/permit behavior, ordered waiters and a test-only producer/consumer
+oracle are now available in `kernel_resources`. Next: production scheduler hook
+integration and inversion/inheritance oracles. No production scheduler trace or
+dashboard evidence is claimed by this prerequisite.
 The existing timing-wheel shared test still fails at `test_timing_wheel.cpp:11`;
 its repair remains the separate Bavly task from the plan.
