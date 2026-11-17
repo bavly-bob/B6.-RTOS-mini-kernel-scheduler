@@ -50,13 +50,17 @@ void TimingWheel::addTimer(int processID, int delay) {
 
 int* TimingWheel::tick(int& expiredCount) {
     expiredCount = 0;
-    if (wheelSize <= 0 || slots[currentSlot].size() == 0) {
+    if (wheelSize <= 0) {
         return nullptr;
     }
 
+    // The clock advances on every tick, even when no timer is due.
     currentSlot = (currentSlot + 1) % wheelSize;
     CircularList<Timer>& slot = slots[currentSlot];
     int timersAtStart = slot.size();
+    if (timersAtStart == 0) {
+        return nullptr;
+    }
 
     int* expiredProcessIDs = new int[timersAtStart];
     // The existing CircularList API has no head-node accessor. Pop and reinsert
@@ -85,7 +89,8 @@ int* TimingWheel::tick(int& expiredCount) {
 }
 
 void TimingWheel::removeTimer(int processID) {
-    if (wheelSize <= 0 || slots[currentSlot].size() == 0) {
+    // Search every slot: the timer usually lives in a future slot, not the current one.
+    if (wheelSize <= 0) {
         return;
     }
 

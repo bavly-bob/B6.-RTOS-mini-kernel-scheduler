@@ -84,9 +84,47 @@ void testInvalidWheelSize() {
     assert(negativeWheel.getCurrentSlot() == 0);
 }
 
+void testEmptyWheelAdvances() {
+    TimingWheel wheel(4);
+    for (int expectedSlot = 1; expectedSlot <= 5; ++expectedSlot) {
+        assertTick(wheel, nullptr, 0);
+        assert(wheel.getCurrentSlot() == expectedSlot % 4);
+    }
+
+    // A timer added after idle ticks is still measured from the moved slot.
+    wheel.addTimer(9, 1);
+    const int due[] = {9};
+    assertTick(wheel, due, 1);
+}
+
+void testExactLap() {
+    TimingWheel wheel(4);
+    wheel.addTimer(5, 4); // Lands in the current slot with zero rounds.
+    for (int tick = 0; tick < 3; ++tick) {
+        assertTick(wheel, nullptr, 0);
+    }
+    const int due[] = {5};
+    assertTick(wheel, due, 1);
+}
+
+void testCancelFutureSlotWhileCurrentEmpty() {
+    TimingWheel wheel(4);
+    wheel.addTimer(7, 3);
+    wheel.addTimer(8, 3);
+    wheel.removeTimer(7); // Current slot is empty; the timer lives in a future slot.
+
+    assertTick(wheel, nullptr, 0);
+    assertTick(wheel, nullptr, 0);
+    const int due[] = {8};
+    assertTick(wheel, due, 1);
+}
+
 void test_timing_wheel() {
     testDelaysAndSlotWrap();
     testLongDelayRounds();
     testRemoveHeadMiddleAndTail();
     testInvalidWheelSize();
+    testEmptyWheelAdvances();
+    testExactLap();
+    testCancelFutureSlotWhileCurrentEmpty();
 }
