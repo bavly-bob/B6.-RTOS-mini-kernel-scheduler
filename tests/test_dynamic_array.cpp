@@ -87,7 +87,8 @@ void testCopyAndMove() {
 
     DynamicArray assigned;
     assigned = original;
-    assigned = assigned;
+    DynamicArray& sameArray = assigned;  // Self-assignment must be harmless.
+    assigned = sameArray;
     assert(assigned.at(0) == &b);
 
     DynamicArray moved(std::move(original));
