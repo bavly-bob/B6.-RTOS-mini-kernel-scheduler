@@ -65,3 +65,35 @@ target_link_libraries(kernel_timers PUBLIC kernel_foundation)
 add_executable(test_timer_manager tests/test_timer_manager.cpp)
 target_link_libraries(test_timer_manager PRIVATE kernel_timers)
 add_test(NAME timer_manager COMMAND test_timer_manager)
+
+# Bounded run trace (events, CPU segments, snapshots) filled by the engine.
+add_library(kernel_trace kernel/src/run_trace.cpp)
+target_link_libraries(kernel_trace PUBLIC kernel_resources)
+
+# JSON run-file exporter (docs/run-schema-v1.md). The build's git commit is
+# written as run.engineRevision so every exported run names its code version.
+execute_process(
+    COMMAND git rev-parse --short HEAD
+    WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    OUTPUT_VARIABLE B6_GIT_REVISION
+    OUTPUT_STRIP_TRAILING_WHITESPACE
+    ERROR_QUIET)
+add_library(run_export app/src/run_exporter.cpp)
+target_include_directories(run_export PUBLIC app/include)
+target_link_libraries(run_export PUBLIC kernel_trace)
+target_compile_definitions(run_export PRIVATE B6_ENGINE_REVISION="${B6_GIT_REVISION}")
+
+file(MAKE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/export_check)
+add_executable(test_run_export tests/test_run_export.cpp)
+target_link_libraries(test_run_export PRIVATE run_export kernel_timers)
+add_test(NAME run_export
+         COMMAND test_run_export ${CMAKE_CURRENT_BINARY_DIR}/export_check)
+
+# Cross-check: the exported files must pass the dashboard's own validator.
+find_program(NODE_EXECUTABLE node)
+if(NODE_EXECUTABLE)
+    add_test(NAME run_export_dashboard_validation
+             COMMAND ${NODE_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/validate_export.js
+                     ${CMAKE_CURRENT_BINARY_DIR}/export_check)
+    set_tests_properties(run_export_dashboard_validation PROPERTIES DEPENDS run_export)
+endif()
