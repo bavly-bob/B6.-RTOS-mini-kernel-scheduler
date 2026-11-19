@@ -1,3 +1,5 @@
+// Keep assert() active in every build type so the suite always checks something.
+#undef NDEBUG
 #include "DynamicArray.h"
 #include <cassert>
 #include <iostream>

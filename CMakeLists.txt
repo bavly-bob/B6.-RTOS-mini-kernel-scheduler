@@ -8,6 +8,7 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 add_library(data_structures
     ds/src/bitmap.cpp
     ds/src/timing_wheel.cpp
+    ds/src/DynamicArray.cpp
 )
 target_include_directories(data_structures PUBLIC ds/include)
 
@@ -27,6 +28,16 @@ add_test(NAME data_structures COMMAND test_ds)
 add_executable(test_minheap tests/test_minheap.cpp)
 target_link_libraries(test_minheap PRIVATE data_structures)
 add_test(NAME minheap COMMAND test_minheap)
+
+# sortedList is header-only (its header includes ds/src/sortedList.tpp).
+add_executable(test_sorted_list tests/test_sortedList.cpp)
+target_link_libraries(test_sorted_list PRIVATE data_structures)
+add_test(NAME sorted_list COMMAND test_sorted_list)
+
+# DynamicArray is compiled into data_structures; its suite has its own main.
+add_executable(test_dynamic_array tests/test_dynamic_array.cpp)
+target_link_libraries(test_dynamic_array PRIVATE data_structures)
+add_test(NAME dynamic_array COMMAND test_dynamic_array)
 
 # Shared records and registry; scheduler/resource behavior is integrated later.
 add_library(kernel_foundation
