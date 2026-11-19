@@ -57,3 +57,11 @@ target_link_libraries(kernel_resources PUBLIC kernel_foundation)
 add_executable(test_resource_manager tests/test_resource_manager.cpp)
 target_link_libraries(test_resource_manager PRIVATE kernel_resources)
 add_test(NAME resource_manager COMMAND test_resource_manager)
+
+# Timer manager: sortedList and MinHeap backends behind one contract.
+add_library(kernel_timers kernel/src/timer_manager.cpp)
+target_link_libraries(kernel_timers PUBLIC kernel_foundation)
+
+add_executable(test_timer_manager tests/test_timer_manager.cpp)
+target_link_libraries(test_timer_manager PRIVATE kernel_timers)
+add_test(NAME timer_manager COMMAND test_timer_manager)
