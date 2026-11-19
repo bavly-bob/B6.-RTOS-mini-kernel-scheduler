@@ -23,6 +23,11 @@ target_link_libraries(test_ds PRIVATE data_structures)
 enable_testing()
 add_test(NAME data_structures COMMAND test_ds)
 
+# MinHeap is header-only; linking data_structures provides ds/include.
+add_executable(test_minheap tests/test_minheap.cpp)
+target_link_libraries(test_minheap PRIVATE data_structures)
+add_test(NAME minheap COMMAND test_minheap)
+
 # Shared records and registry; scheduler/resource behavior is integrated later.
 add_library(kernel_foundation
     kernel/src/registry.cpp
