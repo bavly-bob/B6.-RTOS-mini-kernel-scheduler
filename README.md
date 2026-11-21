@@ -12,8 +12,12 @@ and [producer/consumer oracle](scenarios/semaphore_signal.md). Timers (sorted-li
 and heap backends), bounded trace recording and the JSON run exporter are in
 `kernel_timers`, `kernel_trace` and `run_export`; see
 [the timer/export integration guide](docs/timers-and-export.md) and
-[the run-file contract](docs/run-schema-v1.md). The production scheduler loop and
-priority inheritance are not implemented yet, so no real engine run exists yet.
+[the run-file contract](docs/run-schema-v1.md). The scheduler (clock, priority
+rings with the bitmap, round-robin, EDF, script steps, suspend/resume) and the
+`b6_sim` program are in `kernel_scheduler`, `b6_app` and `b6_sim`; see
+[the scheduler guide](docs/scheduler.md). Real engine runs are in `runs/`.
+Not implemented yet: priority inheritance (Moataz), RM priority assignment and
+metrics (Marc). `b6_sim` refuses those modes with a clear message.
 
 ## Build and test
 
@@ -40,6 +44,22 @@ registered in CMake. If Node.js is installed, `run_export_dashboard_validation`
 also checks exported run files with the dashboard's own validator. A passing
 suite only covers the exercised paths; it does not imply the scheduler works.
 
+## Run the simulator
+
+```sh
+./build/b6_sim --list
+./build/b6_sim --scenario rr_preemption --policy fixed_priority --timer heap
+./build/b6_sim --scenario priority_inversion --inheritance off
+./build/b6_sim --scenario rm_edf_compare --policy edf --output runs/edf.json
+```
+
+Options: `--policy fixed_priority|edf`, `--timer sorted_list|heap`,
+`--inheritance off|on`, `--quantum N`, `--output FILE` (default
+`runs/<scenario>-<policy>-<timer>.json`). The program prints the CPU timeline
+and each job's outcome, then writes the run file. Open `dashboard/index.html`,
+click **Import run(s)** and choose the file. Exit code 0 means a valid run,
+1 an invalid run (still written, for inspection), 2 a bad option or scenario.
+
 ## Layout
 
 - `ds/include`, `ds/src`: committed custom data structures.
@@ -53,5 +73,13 @@ suite only covers the exercised paths; it does not imply the scheduler works.
   backends; trace recording and export, cross-checked by `tests/validate_export.js`.
 - `docs/timers-and-export.md`, `docs/run-schema-v1.md`: timer/trace calls per tick
   phase and the run-file contract shared with the dashboard.
+- `kernel/include/scheduler.h`, `kernel/src/scheduler.cpp`: clock, ready rings,
+  bitmap, EDF heap, dispatch, script steps, suspend/resume.
+- `app/src/simulation.cpp`, `app/src/presets.cpp`, `app/src/main.cpp`: one-run
+  wrapper, named scenarios and the `b6_sim` command-line program.
+- `tests/test_scheduler.cpp`, `tests/validate_runs.js`: golden traces, invariants,
+  both timer backends, repeatability, errors; dashboard check of real runs.
+- `docs/scheduler.md`: tick phases, ready structures, rules, costs and limits.
+- `runs/`: real engine runs (`evidenceType: engine_run`) for the demonstration.
 
 The PDF completion plan is local reference material and is ignored by Git.
