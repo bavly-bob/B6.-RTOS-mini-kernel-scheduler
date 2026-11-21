@@ -286,6 +286,50 @@ static void testOverload() {
     }
 }
 
+static void checkRunProperties(const Simulation& sim);
+
+// Plan acceptance "boundary deadline": completion exactly at the deadline is
+// on time; a job unfinished at its deadline is flagged once, and a later
+// completion keeps the miss; a deadline after the horizon is never assumed missed.
+static void testDeadlineBoundary() {
+    static ScenarioInput in;  // Large fixed arrays: keep them off the stack.
+    in = ScenarioInput{};
+    Scenario& s = in.scenario;
+    s.config.scenarioId = "deadline_boundary";
+    s.config.horizonTicks = 8;
+    s.config.quantumTicks = 10;  // No rotation; only priorities matter here.
+    struct Spec { const char* name; int priority; Tick run; Tick deadline; };
+    const Spec specs[] = {{"on_time", 5, 3, 3}, {"late", 3, 2, 3}, {"future", 1, 10, 50}};
+    for (const Spec& spec : specs) {
+        TaskSpec& t = s.tasks[s.taskCount];
+        t.taskId = static_cast<TaskId>(s.taskCount++);
+        t.name = spec.name;
+        t.basePriority = spec.priority;
+        t.relativeDeadline = spec.deadline;
+        t.scriptLength = 2;
+        t.script[0] = {OpCode::Run, spec.run, std::nullopt};
+        t.script[1] = {OpCode::End, 0, std::nullopt};
+    }
+    Simulation sim(in);
+    CHECK(sim.run());
+    CHECK_EQ(cpu(sim), std::string("1[0,3) 2[3,5) 3[5,8)"));
+
+    const Job& onTime = job(sim, 1);  // Completes at 3 == its deadline 3.
+    CHECK_EQ(*onTime.completionTick, 3);
+    CHECK(!onTime.deadlineMissRecorded);
+
+    const Job& late = job(sim, 2);    // Unfinished at 3, completes at 5.
+    CHECK(late.deadlineMissRecorded && *late.deadlineMissTick == 3);
+    CHECK_EQ(*late.completionTick, 5);
+    CHECK_EQ(events(sim, EventType::DeadlineMiss), std::string("2@3"));  // Once, not at 4 again.
+    const TraceEvent* done = findEvent(sim, EventType::Complete, 5, 2);
+    CHECK(done && datum(*done, "late") == 1);
+
+    const Job& future = job(sim, 3);  // Unfinished at the horizon, deadline 50.
+    CHECK(!future.completionTick && !future.deadlineMissRecorded);
+    checkRunProperties(sim);
+}
+
 // ---- Properties checked on every preset, policy and timer backend --------------
 
 static void checkRunProperties(const Simulation& sim) {
@@ -465,6 +509,7 @@ int main(int argc, char** argv) {
     testSemaphoreSignal();
     testEdfAndFixedPriorityComparison();
     testOverload();
+    testDeadlineBoundary();
     testAllPresetsAndRepeatability();
     testPriorityMoveKeepsRingsAndBitmapInStep();
     testInvalidInputs();
