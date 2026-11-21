@@ -7,8 +7,8 @@ namespace b6 {
 ResourceManager::ResourceManager(Registry& registry, ResourceSchedulerHooks& hooks)
     : registry_(registry), hooks_(hooks) {
     const Scenario& s = registry_.scenario();
-    if (s.config.policy != Policy::FixedPriority || s.config.inheritance)
-        throw std::invalid_argument("resource manager currently requires fixed priority with inheritance off");
+    if (s.config.policy != Policy::FixedPriority)
+        throw std::invalid_argument("resource manager requires fixed priority; RM/EDF resources are unsupported");
     for (std::size_t i = 0; i < s.mutexCount; ++i)
         mutexes_[i].resourceId = s.mutexes[i].resourceId;
     for (std::size_t i = 0; i < s.semaphoreCount; ++i) {
@@ -86,6 +86,63 @@ void ResourceManager::notify(Job& job, bool ready) {
     }
 }
 
+void ResourceManager::changePriority(Job& job, int priority, ResourceId mutexId,
+                                     PriorityChangeReason reason) {
+    if (job.effectivePriority == priority) return;
+    const ResourcePriorityChange change{job.jobId, mutexId, job.effectivePriority, priority, reason};
+    job.effectivePriority = priority;
+    notifying_ = true;
+    try {
+        hooks_.onPriorityChanged(job, change);
+        notifying_ = false;
+    } catch (...) {
+        notifying_ = false;
+        failed_ = true; // Never continue with priority and ready membership out of sync.
+        throw;
+    }
+}
+
+void ResourceManager::recomputeOwner(MutexRecord& record) {
+    if (!record.ownerJobId || !registry_.scenario().config.inheritance) return;
+    Job& owner = *registry_.findJob(*record.ownerJobId);
+    int priority = registry_.findTask(owner.taskId)->basePriority;
+    if (const Job* waiter = record.waiters.front()) {
+        if (waiter->effectivePriority > priority) priority = waiter->effectivePriority;
+    }
+    // A job cannot hold one mutex while waiting for another: no chained donation.
+    changePriority(owner, priority, record.resourceId, PriorityChangeReason::Inheritance);
+}
+
+const Job& ResourceManager::liveJob(JobId id) const {
+    requireUsable();
+    const Job* job = registry_.findJob(id);
+    if (!job) throw std::invalid_argument("unknown job ID");
+    if (job->state == JobState::Completed) throw std::logic_error("job is already completed");
+    return *job;
+}
+
+void ResourceManager::validateMaySleep(JobId jobId) const {
+    const Job& job = liveJob(jobId);
+    if (job.heldMutexId || job.state != JobState::Running || job.suspended ||
+        job.blockReason != BlockReason::None || job.waitNode || job.blockedResourceId ||
+        job.timerId || job.wakeTick)
+        throw std::logic_error("sleep requires a running, non-waiting job with no held mutex");
+}
+
+void ResourceManager::validateMaySuspend(JobId jobId) const {
+    const Job& job = liveJob(jobId);
+    if (job.heldMutexId || job.suspended || job.state == JobState::Suspended)
+        throw std::logic_error("cannot suspend a mutex owner or an already suspended job");
+}
+
+void ResourceManager::validateMayComplete(JobId jobId) const {
+    const Job& job = liveJob(jobId);
+    if (job.heldMutexId || job.state != JobState::Running || job.suspended ||
+        job.blockReason != BlockReason::None || job.waitNode || job.blockedResourceId ||
+        job.timerId || job.wakeTick)
+        throw std::logic_error("completion requires a running job without locks or waits");
+}
+
 void ResourceManager::enqueue(CircularList<Job>& queue, Job& job) {
     if (nextWaitSequence_ == std::numeric_limits<Sequence>::max())
         throw std::length_error("resource wait sequence exhausted");
@@ -123,6 +180,9 @@ void ResourceManager::resolveWait(CircularList<Job>& queue, Job& job) {
     job.blockedResourceId.reset();
     job.quantumRemaining = registry_.scenario().config.quantumTicks;
     job.state = job.suspended ? JobState::Suspended : JobState::Ready;
+    // Handoff may inherit from remaining (including suspended) waiters. Compute
+    // this before onReady so the recipient is inserted at its final priority.
+    if (job.heldMutexId) recomputeOwner(mutex(*job.heldMutexId));
     if (!job.suspended) notify(job, true);
 }
 
@@ -133,10 +193,12 @@ AcquireResult ResourceManager::lock(JobId caller, ResourceId mutexId) {
     if (!record.ownerJobId) {
         record.ownerJobId = job.jobId;
         job.heldMutexId = mutexId;
+        recomputeOwner(record);
         return AcquireResult::Acquired;
     }
     enqueue(record.waiters, job);
     block(job, BlockReason::Mutex, mutexId);
+    recomputeOwner(record);
     return AcquireResult::Blocked;
 }
 
@@ -163,6 +225,8 @@ std::optional<JobId> ResourceManager::unlock(JobId caller, ResourceId mutexId) {
         throw std::logic_error("only the mutex owner may unlock");
     record.ownerJobId.reset();
     job.heldMutexId.reset();
+    changePriority(job, registry_.findTask(job.taskId)->basePriority, mutexId,
+                   PriorityChangeReason::MutexRelease);
     return grantMutex(record);
 }
 
