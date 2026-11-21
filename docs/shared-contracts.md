@@ -170,8 +170,8 @@ jobs, valid ID zero, null timestamps, release ordering, full 512-job capacity,
 resource script restrictions and timer ordering. Its checks stay active with NDEBUG.
 
 Resource ownership/permit behavior, ordered waiters and a test-only producer/consumer
-oracle are now available in `kernel_resources`. Next: production scheduler hook
-integration and inversion/inheritance oracles. No production scheduler trace or
-dashboard evidence is claimed by this prerequisite.
-The existing timing-wheel shared test still fails at `test_timing_wheel.cpp:11`;
-its repair remains the separate Bavly task from the plan.
+oracle are now available in `kernel_resources`, together with priority inheritance,
+restoration, runtime transition guards and test-adapter inversion OFF/ON traces.
+Next is production scheduler/timer integration. No production scheduler trace or
+dashboard evidence is claimed by this prerequisite. The timing-wheel failure noted
+in the original plan was repaired upstream before the 21 November update.
