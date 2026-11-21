@@ -135,6 +135,7 @@ with an `ERROR` event, never presented as a successful run.
 | `rm_edf_compare` (EDF) | A0[0,2) B0[2,6) A1[6,8); B0 completes 6; B1 released 7, unfinished |
 | `rm_edf_compare` (fixed priority) | A0[0,2) B0[2,5) A1[5,7) B0[7,8); B0 completes 8, missed at 7 |
 | `overload` | 9 jobs, misses recorded, CPU never idle |
+| deadline boundary (test only) | completion at the deadline is on time; unfinished at the deadline is flagged once and stays flagged after a late completion; a deadline after the horizon is not missed |
 
 On every preset, policy and timer backend the tests also check CPU
 conservation, full horizon coverage, one snapshot per boundary, at most one
@@ -151,6 +152,21 @@ import validator.
 - Each boundary also scans all released jobs for deadlines and snapshots:
   O(jobs) per tick. That is trace cost, not the cost of a scheduling decision.
 - This is a simulation with zero switching overhead, not a real-time guarantee.
+
+## Scope decision: no AVL tree
+
+The team's older Milestone 1 plan listed an AVL tree. It is deliberately not
+built. The B6 proposal's core requires custom non-linear structures for the
+scheduler, and those are already covered: the binary min-heap (EDF ready
+queue and heap timer backend), the circular lists with node handles (ready
+rings and wait queues), the priority bitmap and the hash map (ID lookup).
+No scheduling operation needs ordered search by key with rebalancing:
+selection is by priority level (bitmap), earliest deadline or wake time
+(heap), or FIFO within a level (ring). An AVL tree would add code to test and
+explain without improving any required behaviour. This follows the completion
+plan's risk table (p.29, owner Youssef), which asks for this revision to be
+recorded rather than silently dropped. It can be revisited after Milestone 2
+if a measured need appears (for example, ordered range queries over timers).
 
 ## Not done here (other members' parts)
 
