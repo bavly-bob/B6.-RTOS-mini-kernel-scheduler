@@ -1,10 +1,11 @@
 # Mutex and semaphore integration
 
-Moataz's 17 November component: mutex ownership, semaphore permits and ordered
-waiters. `ResourceManager` works with the shared registry and existing circular
-list. It does not implement a production scheduler, priority inheritance, timer
-operations or a JSON event writer. See the independent
-[producer/consumer oracle](../scenarios/semaphore_signal.md).
+Moataz's synchronization component: mutex ownership, semaphore permits, ordered
+waiters, priority inheritance and runtime transition guards. `ResourceManager`
+works with the shared registry and existing circular list. It does not implement
+a production scheduler, timer operations or a JSON event writer. See the independent
+[producer/consumer oracle](../scenarios/semaphore_signal.md) and
+[inversion OFF/ON oracle](../scenarios/priority_inversion.md).
 
 ## Construct and connect
 
@@ -14,9 +15,9 @@ per run, in that order. The registry and adapter must outlive the manager.
 The manager copies validated resource IDs/counts into its owned resource records;
 job pointers in wait queues remain borrowed from the registry.
 
-The current manager rejects every policy other than fixed priority and rejects
-`inheritance=true`. The foundation validator still accepts inheritance as a future
-configuration; construction fails explicitly until donation is implemented.
+The manager accepts fixed priority with `inheritance=false` or `true`. RM/EDF
+resource combinations remain rejected, consistent with the initial comparison
+model. Nested, recursive and chained locking remain unsupported.
 
 Youssef implements `ResourceSchedulerHooks`:
 
@@ -24,6 +25,15 @@ Youssef implements `ResourceSchedulerHooks`:
 | --- | --- | --- |
 | `onBlocked(Job&)` | BLOCKED, block reason/resource, wait node and wait sequence | Remove ready/EDF membership, clear the saved ready handle, update bitmap/running selection |
 | `onReady(Job&)` | READY, cleared wait metadata, fresh quantum | Enqueue once, assign ready sequence, set the ready handle and bitmap |
+| `onPriorityChanged(Job&, const ResourcePriorityChange&)` | effectivePriority is now `change.to` | Move any existing ready node from `change.from` to `change.to`, clear the old handle and save the new one; update bitmap bits; preserve state, CPU work and quantum |
+
+The priority callback must be implemented by adapters supporting inheritance.
+Its default throws when invoked, preserving older PI-off adapters without silently
+ignoring a required requeue. A no-op is incorrect for jobs in ready rings.
+If `readyNode` is null during ownership handoff, emit the priority event but do not
+enqueue: the following `onReady` does that once at the final priority.
+`ResourcePriorityChange` contains job ID, mutex ID, from/to and either Inheritance
+or MutexRelease. Add the current tick/phase/sequence in the scheduler event sink.
 
 Callbacks finish their queue updates synchronously. They must not dispatch or call
 resource operations recursively. The scheduler reselects after the operation has
@@ -72,8 +82,29 @@ cannot steal it. Remaining waiters keep their memberships and stable handles.
 Wait queues are physically ordered by effective priority descending, then wait
 sequence ascending. Equal-priority waiters are FIFO. A single increasing sequence
 is used across resources. Current fixed-priority runs must not change effective
-priorities while jobs wait; a future inheritance implementation must explicitly
-reorder affected queues. No donation or base-priority restoration occurs here.
+priorities while jobs wait. Under the supported single-mutex model, an owner cannot
+also wait for a semaphore/mutex or sleep. Donation therefore changes owners in
+ready rings, not the keys of queued waiters. Do not add arbitrary priority changes
+without also implementing waiter reordering.
+
+## Priority inheritance
+
+When a mutex acquisition blocks, remove the caller from ready membership first,
+then recompute its owner's priority as max(basePriority, highest waiter priority).
+Only real changes invoke `onPriorityChanged`; lower/equal donors cause no redundant
+move or event. With inheritance off, acquisition never donates.
+
+On unlock, clear the former owner's held-lock metadata and restore its base
+priority through that callback. Then grant one eligible waiter. A recipient may
+inherit from remaining waiters; compute this before its ready callback so it is
+enqueued at the correct priority exactly once. Running owners stay RUNNING until
+the scheduler reselects. Neither donation nor restoration resets a partial quantum.
+
+Suspended mutex waiters retain their unresolved waits and remain donors, although
+they cannot receive ownership until resumed. This follows the maximum-over-all-
+waiters rule; it can boost a new, lower-priority owner when a higher-priority waiter
+is suspended. Queue keys remain stable. Multi-lock/chained donation is deliberately
+excluded, so unconditional restoration to base is valid in this supported model.
 
 The existing circular list has no insert-before method. The manager rotates to
 the insertion point, appends there, then restores the appropriate head. This
@@ -102,9 +133,11 @@ integration rules so later suspension work does not lose a wait:
   while preserving its wait metadata, and calls `resumeMutexWait(jobId)`. If the
   mutex is free, the highest eligible waiter gets it; if owned, the job keeps
   waiting. Do not enqueue it separately unless its wait has resolved.
-- The scheduler must reject SLEEP, suspension and completion while holding a
-  mutex. The static script validator already rejects SLEEP/END with a held lock;
-  the future interpreter must enforce runtime state changes too.
+- Before transitions, the scheduler calls `validateMaySleep`, `validateMaySuspend`
+  or `validateMayComplete`. These reject unknown/completed jobs and held mutexes;
+  sleep/completion also require RUNNING with no wait/timer membership. They validate
+  only: they do not implement the scheduler's suspend, timer or completion logic.
+  The static script validator also rejects SLEEP/END with a held lock.
 
 Destroy the manager only after stopping the run. Destruction frees waiter nodes,
 clears their saved handles and clears owners' held-mutex metadata. It does not wake
@@ -126,6 +159,17 @@ rules, direct grants, overflow, suspended waits, teardown and hook failures.
 The scripted producer/consumer test checks P [0,2), C [2,3), P [3,4), completion
 times 3/4 and exact CPU totals, against the oracle written independently.
 
-Next: integrate Youssef's production hooks; then inversion-OFF, priority donation
-through his requeue hook, inheritance-ON and restoration. The existing timing-wheel
-test failure is still outside this component.
+The inversion tests execute the same L/H/M scripts with inheritance OFF and ON,
+check every CPU interval, H completion at 9 versus 5, the miss at 6, and priority
+events at 1 and 4. They check ready-ring/bitmap invariants, exact CPU totals, final
+ownership cleanup and fresh-run repeatability. Further cases cover multiple donors,
+base-priority floors, no semaphore donation, suspended donors, priority-hook failures
+and reentrant hooks. Checks remain active in Release builds.
+
+Next is joint integration, not another scheduler implementation in this component:
+connect Youssef's production hooks and Sarofem's timers/export, then replay the
+oracles end to end. No production scheduler exists in the inspected main snapshot
+bacfb25. Test-adapter traces are not production JSON or GUI evidence. Tests check
+runtime guards against a timer-blocked record; actual expiry/resume behavior still
+requires the real scheduler and timer backends.
+See [Moataz's status and rehearsal notes](moataz-completion-status.md).
