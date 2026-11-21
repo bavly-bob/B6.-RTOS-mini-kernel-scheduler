@@ -97,3 +97,32 @@ if(NODE_EXECUTABLE)
                      ${CMAKE_CURRENT_BINARY_DIR}/export_check)
     set_tests_properties(run_export_dashboard_validation PROPERTIES DEPENDS run_export)
 endif()
+
+# Scheduler (Youssef Gohar): clock, ready rings + bitmap, EDF heap, dispatch,
+# script interpreter and suspend/resume. Calls resources, timers and trace.
+add_library(kernel_scheduler kernel/src/scheduler.cpp)
+target_link_libraries(kernel_scheduler PUBLIC kernel_resources kernel_timers kernel_trace)
+
+# Application layer: one-run Simulation wrapper and the named preset scenarios.
+add_library(b6_app app/src/simulation.cpp app/src/presets.cpp)
+target_include_directories(b6_app PUBLIC app/include)
+target_link_libraries(b6_app PUBLIC kernel_scheduler run_export)
+
+# The command-line simulator: preset -> scheduler -> run file for the dashboard.
+add_executable(b6_sim app/src/main.cpp)
+target_link_libraries(b6_sim PRIVATE b6_app)
+
+# Golden traces, invariants, both timer backends, repeatability and errors.
+file(MAKE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/scheduler_runs)
+add_executable(test_scheduler tests/test_scheduler.cpp)
+target_link_libraries(test_scheduler PRIVATE b6_app)
+add_test(NAME scheduler
+         COMMAND test_scheduler ${CMAKE_CURRENT_BINARY_DIR}/scheduler_runs)
+
+# Every real engine run must also pass the dashboard's own import validator.
+if(NODE_EXECUTABLE)
+    add_test(NAME scheduler_runs_dashboard_validation
+             COMMAND ${NODE_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/validate_runs.js
+                     ${CMAKE_CURRENT_BINARY_DIR}/scheduler_runs)
+    set_tests_properties(scheduler_runs_dashboard_validation PROPERTIES DEPENDS scheduler)
+endif()
