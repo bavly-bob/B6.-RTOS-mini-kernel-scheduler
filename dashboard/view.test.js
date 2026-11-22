@@ -4,7 +4,8 @@
 const assert = require("assert");
 const fs = require("fs");
 const path = require("path");
-const { snapshotAt, inspectJob, jobRowsAt, resourcesAt, sleepersAt, readyAt, eventsNear, describeEvent } = require("./app.js");
+const { snapshotAt, inspectJob, jobRowsAt, resourcesAt, sleepersAt, readyAt, eventsNear, describeEvent,
+  keyEvents, overallMetrics, taskMetrics, runNotes } = require("./app.js");
 
 const load = (file) => JSON.parse(fs.readFileSync(path.join(__dirname, file), "utf8"));
 const runFile = (name) => load(`../runs/${name}.json`);
@@ -97,5 +98,48 @@ assert.strictEqual(describeEvent(inversion, miss), "H · job 2: unfinished at de
 assert.strictEqual(describeEvent(inversion, { type: "PRIORITY_CHANGE", jobId: 1, resourceId: 0, reason: "inheritance", data: { from: 1, to: 3 } }),
   "L · job 1: effective priority 1 → 3, inheritance, mutex 0");
 assert.strictEqual(describeEvent(inversion, { type: "ERROR", jobId: null, resourceId: null, reason: "engine_error", data: {} }), "engine error");
+
+// Inversion ON: golden trace B from the plan (p.15), held as a labelled design fixture.
+const on = load("fixtures/inversion_on.design.json");
+assert.strictEqual(on.run.evidenceType, "design_fixture");
+assert.deepStrictEqual(on.segments.map((s) => [s.start, s.end, s.jobId]), [[0, 1, 1], [1, 4, 1], [4, 5, 2], [5, 9, 3], [9, 10, null]]);
+assert.deepStrictEqual(on.jobs.map((j) => [j.completionTick, j.deadlineMissed]), [[4, false], [5, false], [9, false]]);
+assert.deepStrictEqual([0, 1, 3].map((t) => field(on, 1, t, "Effective priority")), ["1", "3 (boosted from 1)", "3 (boosted from 1)"]);
+assert.strictEqual(field(on, 1, 4, "Effective priority"), "1");
+assert.deepStrictEqual([1, 2, 3, 4].map((t) => field(on, 2, t, "State")), ["BLOCKED", "BLOCKED", "BLOCKED", "RUNNING"]);
+
+// Key events explain the two outcomes: a miss when OFF, a donation when ON.
+assert.deepStrictEqual(keyEvents(inversion).map((e) => [e.tick, e.type]), [[6, "DEADLINE_MISS"]]);
+assert.deepStrictEqual(keyEvents(on).map((e) => [e.tick, e.type, e.data.from, e.data.to]), [[1, "PRIORITY_CHANGE", 1, 3], [4, "PRIORITY_CHANGE", 3, 1]]);
+
+// RM-style and EDF runs share releases but not decisions (plan p.16).
+const rmStyle = runFile("rm_edf_compare-fixed_priority-heap");
+assert.deepStrictEqual(rmStyle.jobs.map((j) => j.releaseTick), edf.jobs.map((j) => j.releaseTick));
+assert.deepStrictEqual(keyEvents(rmStyle).map((e) => [e.tick, e.type, e.jobId]), [[7, "DEADLINE_MISS", 2]]);
+assert.deepStrictEqual(keyEvents(edf), []);
+
+// Metrics are shown only as exported; nothing is filled in.
+assert.deepStrictEqual(overallMetrics(inversion), []);
+assert.deepStrictEqual(taskMetrics(inversion), []);
+assert.deepStrictEqual(overallMetrics(on), [["CPU busy", "90% (9 of 10 ticks)"], ["Completed jobs", 3], ["Unfinished jobs", 0], ["Deadline misses", 0],
+  ["Periodic demand", "not applicable"], ["RM sufficient bound", "not applicable: one-shot tasks that share a mutex"]]);
+const withBound = { metrics: { overall: { busyTicks: 8, observedTicks: 8, busyPercent: 100, completedJobs: 3, unfinishedJobs: 1, deadlineMisses: 1,
+  demandUtilization: 34 / 35, rmBound: 0.8284271247, rmBoundApplicable: true, rmBoundNote: "demand above the bound is inconclusive" } } };
+assert.deepStrictEqual(overallMetrics(withBound).slice(-2), [["Periodic demand", "97.14%"], ["RM sufficient bound", "82.84%: demand above the bound is inconclusive"]]);
+assert.deepStrictEqual(overallMetrics({ metrics: { overall: { busyPercent: null, completedJobs: 2 } } })[0], ["CPU busy", "not given"]);
+assert.deepStrictEqual(taskMetrics(on)[2], ["M", 1, 7, 7, 7, "insufficient samples", 0]);
+const samples = structuredClone(on);
+samples.metrics.perTask = [
+  { taskId: 0, completedSamples: 0, responseMin: null, responseMean: null, responseMax: null, jitter: null, misses: 2 },
+  { taskId: 1, completedSamples: 3, responseMin: 2, responseMean: 8 / 3, responseMax: 4, jitter: 2, misses: 0 },
+];
+assert.deepStrictEqual(taskMetrics(samples), [["L", 0, "no completed job", "no completed job", "no completed job", "insufficient samples", 2], ["H", 3, 2, 2.67, 4, 2, 0]]);
+
+// Trust notes: a clean run has none; anything else is stated.
+assert.deepStrictEqual(runNotes(on), []);
+assert.deepStrictEqual(runNotes(inversion), ["Warning: metrics were not computed for this run"]);
+const stopped = structuredClone(inversion);
+stopped.validation = { status: "invalid", error: "event limit", warnings: [], limitsHit: ["maxEvents"], traceTruncated: true };
+assert.deepStrictEqual(runNotes(stopped), ["INVALID RUN, do not use as evidence: event limit", "Limit reached: maxEvents", "The trace is truncated: some records are missing."]);
 
 console.log("dashboard selected-tick checks passed");

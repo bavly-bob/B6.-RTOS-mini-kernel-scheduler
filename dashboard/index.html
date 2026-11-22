@@ -23,6 +23,7 @@
 
   <main id="view" hidden>
     <div id="fixtureBanner" class="fixture" hidden>SAMPLE DATA: design_fixture, hand-written for the dashboard and not produced by the engine.</div>
+    <div id="runNotes" role="status" hidden></div>
 
     <div class="layout">
       <section class="card">
@@ -33,7 +34,7 @@
       <div>
       <section class="card">
         <h2>Gantt chart</h2>
-        <div class="legend"><span class="sw idle"></span>idle <span class="sw dl"></span>deadline <span class="sw rel"></span>release <span class="sw cur"></span>selected tick</div>
+        <div class="legend"><span class="sw idle"></span>idle <span class="sw dl"></span>deadline <span class="sw rel"></span>release <span class="sw cur"></span>selected tick <span class="missKey">✕</span>deadline missed <span class="sw bst"></span>boosted priority (P = effective)</div>
         <div class="scroll"><svg id="gantt" role="img" aria-label="CPU intervals per job"></svg></div>
         <div class="controls">
           <button type="button" id="reset">Reset</button>
@@ -68,6 +69,8 @@
       <section class="card">
         <h2>Events near the selected tick <small>(select one to jump to it)</small></h2>
         <div id="events" class="events"></div>
+        <h2>Key events <small>(priority changes, misses and errors in the whole run)</small></h2>
+        <div id="keyEvents" class="events"></div>
       </section>
     </div>
 
@@ -83,6 +86,7 @@
 
     <section class="card">
       <h2>Metrics <small>(computed by C++, shown as exported)</small></h2>
+      <p id="noMetrics" class="note" hidden>The engine exported no metrics for this run, so none are shown.</p>
       <dl id="overall" class="meta"></dl>
       <div class="scroll"><table id="perTask"></table></div>
     </section>

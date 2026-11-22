@@ -49,7 +49,7 @@ function validateRun(run) {
   const v = run.validation;
   need(v.status === "ok" || v.status === "invalid", `validation.status must be "ok" or "invalid", got ${JSON.stringify(v.status)}.`);
   need(!(v.status === "ok" && v.traceTruncated), 'validation.traceTruncated must be false when status is "ok".');
-  need(v.warnings === undefined || Array.isArray(v.warnings), "validation.warnings must be an array.");
+  for (const f of ["warnings", "limitsHit"]) need(v[f] === undefined || Array.isArray(v[f]), `validation.${f} must be an array.`);
 
   const taskIds = new Set();
   run.tasks.forEach((t, i) => {
@@ -228,7 +228,7 @@ function burstText(run, row) {
 }
 
 const priorityText = (row) => row.effectivePriority === row.basePriority ? String(row.basePriority)
-  : `${row.effectivePriority} (base ${row.basePriority})`;
+  : `${row.effectivePriority} (boosted from ${row.basePriority})`;
 
 // [label, value] pairs describing one job at one tick.
 function inspectJob(run, jobId, tick) {
@@ -239,7 +239,7 @@ function inspectJob(run, jobId, tick) {
   const row = jobRowsAt(run, tick).find((r) => r.jobId === jobId);
   if (!row) return state(tick < job.releaseTick ? `not released yet (releases at ${job.releaseTick})` : "not in this snapshot");
   return [...state(row.state),
-    ["Base priority", row.basePriority], ["Effective priority", row.effectivePriority],
+    ["Base priority", row.basePriority], ["Effective priority", priorityText(row)],
     ["Waiting for", waitText(run, row, tick)], ["Holds", row.heldMutexId === null ? "nothing" : `mutex ${row.heldMutexId}`],
     ["CPU left in this RUN", burstText(run, row)], ["CPU used so far", row.totalCpuUsed],
     ["Next step", nextStep(run, row)], ["Deadline missed", row.deadlineMissed ? "yes" : "no, not by this tick"]];
@@ -268,8 +268,48 @@ function describeEvent(run, e) {
   return (e.jobId === null ? "" : `${jobLabel(run, e.jobId)}: `) + parts.join(", ");
 }
 
+// The events that explain an outcome, over the whole run.
+const keyEvents = (run) => run.events.filter((e) => ["PRIORITY_CHANGE", "DEADLINE_MISS", "ERROR"].includes(e.type));
+
+// ---- Metrics and trust notes: exported values with units and explicit "not applicable" ----
+const round2 = (v) => (typeof v === "number" ? Math.round(v * 100) / 100 : v);
+const percent = (v) => (typeof v === "number" ? `${round2(v)}%` : "not given");
+
+// [label, value] pairs; empty when the engine exported no metrics.
+function overallMetrics(run) {
+  const { busyTicks, observedTicks, busyPercent, completedJobs, unfinishedJobs, deadlineMisses,
+    demandUtilization, rmBound, rmBoundApplicable, rmBoundNote, ...others } = run.metrics.overall;
+  if (Object.keys(run.metrics.overall).length === 0) return [];
+  const fraction = (v) => (typeof v === "number" ? percent(v * 100) : "not applicable");
+  return [
+    ["CPU busy", percent(busyPercent) + (observedTicks === undefined ? "" : ` (${busyTicks} of ${observedTicks} ticks)`)],
+    ["Completed jobs", completedJobs], ["Unfinished jobs", unfinishedJobs], ["Deadline misses", deadlineMisses],
+    ["Periodic demand", fraction(demandUtilization)],
+    ["RM sufficient bound", (rmBoundApplicable ? fraction(rmBound) : "not applicable") + (rmBoundNote ? `: ${rmBoundNote}` : "")],
+    ...Object.entries(others),
+  ];
+}
+
+function taskMetrics(run) {
+  return run.metrics.perTask.map((p) => [taskOf(run, p.taskId).name, p.completedSamples,
+    ...[p.responseMin, p.responseMean, p.responseMax].map((v) => (v === null ? "no completed job" : round2(v))),
+    p.jitter === null ? "insufficient samples" : p.jitter, p.misses]);
+}
+
+// Reasons not to take the run at face value; empty for a clean run.
+function runNotes(run) {
+  const v = run.validation;
+  return [
+    ...(v.status === "invalid" ? [`INVALID RUN, do not use as evidence: ${v.error ?? "no reason given"}`] : []),
+    ...(v.limitsHit ?? []).map((l) => `Limit reached: ${l}`),
+    ...(v.traceTruncated ? ["The trace is truncated: some records are missing."] : []),
+    ...(v.warnings ?? []).map((w) => `Warning: ${w}`),
+  ];
+}
+
 if (typeof module !== "undefined")
-  module.exports = { validateRun, parseRun, snapshotAt, inspectJob, jobRowsAt, resourcesAt, sleepersAt, readyAt, eventsNear, describeEvent };
+  module.exports = { validateRun, parseRun, snapshotAt, inspectJob, jobRowsAt, resourcesAt, sleepersAt, readyAt,
+    eventsNear, describeEvent, keyEvents, overallMetrics, taskMetrics, runNotes };
 
 if (typeof document !== "undefined") {
   const $ = (id) => document.getElementById(id);
@@ -361,6 +401,10 @@ if (typeof document !== "undefined") {
       const pri = job ? `, priority base ${show(s.basePriority)} / effective ${show(s.effectivePriority)}` : "";
       rect.append(svgEl("title", {}, `[${s.start}, ${s.end}) ${key === "idle" ? "idle" : "job " + key}${pri}`));
       svg.append(rect);
+      if (job && s.effectivePriority > s.basePriority) {
+        rect.setAttribute("class", "boosted");
+        if ((s.end - s.start) * px > 24) svg.append(svgEl("text", { x: x(s.start) + 4, y: y + 13, class: "boost" }, `P${s.effectivePriority}`));
+      }
     }
 
     for (const l of lanes) {
@@ -371,6 +415,11 @@ if (typeof document !== "undefined") {
         const d = svgEl("line", { x1: x(l.job.absoluteDeadline), x2: x(l.job.absoluteDeadline), y1: y, y2: y + laneH, class: "deadline" });
         d.append(svgEl("title", {}, `deadline ${l.job.absoluteDeadline}`));
         svg.append(d);
+      }
+      if (l.job.deadlineMissTick !== null) {
+        const m = svgEl("text", { x: x(l.job.deadlineMissTick) + 3, y: y + laneH / 2 + 4, class: "miss" }, "✕");
+        m.append(svgEl("title", {}, `deadline missed, recorded at ${l.job.deadlineMissTick}`));
+        svg.append(m);
       }
     }
 
@@ -474,9 +523,11 @@ if (typeof document !== "undefined") {
 
   function render(run) {
     pause();
+    // Switching between runs of one scenario (OFF/ON, RM/EDF) keeps the tick and job for comparison.
+    const same = current !== null && current.run.scenarioId === run.run.scenarioId;
+    tick = same ? Math.min(tick, run.config.horizonTicks) : 0;
+    if (!same || !run.jobs.some((j) => j.jobId === selectedJob)) selectedJob = run.jobs.length ? run.jobs[0].jobId : null;
     current = run;
-    tick = 0;
-    selectedJob = run.jobs.length ? run.jobs[0].jobId : null;
     $("view").hidden = false;
     $("slider").max = run.config.horizonTicks;
     $("jobSelect").replaceChildren(...run.jobs.map((j) => {
@@ -484,7 +535,12 @@ if (typeof document !== "undefined") {
       o.value = j.jobId;
       return o;
     }));
+    if (selectedJob !== null) $("jobSelect").value = selectedJob;
     $("fixtureBanner").hidden = run.run.evidenceType !== "design_fixture";
+    const notes = runNotes(run);
+    $("runNotes").hidden = notes.length === 0;
+    $("runNotes").textContent = notes.join("\n");
+    $("runNotes").className = run.validation.status === "invalid" ? "notes invalid" : "notes";
     const c = run.config, r = run.run;
     fillMeta($("runMeta"), [
       ["Run ID", r.runId], ["Scenario", r.scenarioId], ["Label", r.label], ["Evidence", r.evidenceType],
@@ -507,11 +563,14 @@ if (typeof document !== "undefined") {
         j.completionTick === null ? "not completed" : j.completionTick - j.releaseTick,
         j.totalCpuUsed, j.finalState, j.deadlineMissed ? `yes @ ${show(j.deadlineMissTick)}` : "no"]));
 
-    const m = run.metrics;
-    fillMeta($("overall"), Object.entries(m.overall || {}));
-    fillTable($("perTask"), ["Task", "Completed samples", "Response min", "mean", "max", "Jitter (max−min)", "Misses"],
-      (m.perTask || []).map((p) => [taskName.get(p.taskId) ?? p.taskId, p.completedSamples, p.responseMin, p.responseMean, p.responseMax,
-        p.jitter === null && p.completedSamples < 2 ? "insufficient samples" : p.jitter, p.misses]));
+    const overall = overallMetrics(run);
+    $("noMetrics").hidden = overall.length > 0;
+    fillMeta($("overall"), overall);
+    fillTable($("perTask"), ["Task", "Completed samples", "Response min", "mean", "max", "Jitter (max−min)", "Misses"], taskMetrics(run));
+    $("perTask").hidden = run.metrics.perTask.length === 0;
+
+    const key = keyEvents(run).map((e) => eventButton(run, e));
+    $("keyEvents").replaceChildren(...(key.length ? key : [el("p", "No priority change, deadline miss or error was recorded.", "note")]));
     renderTick();
   }
 
