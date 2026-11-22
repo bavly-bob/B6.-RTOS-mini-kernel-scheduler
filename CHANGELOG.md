@@ -69,3 +69,48 @@ Page numbers refer to the completion plan.
 - `node tests/validate_export.js` and `node tests/validate_runs.js` against files
   from a fresh build (18 engine runs): passed, so the stricter checks agree with
   the C++ exporter.
+
+## Phase 2: Selected-tick playback and inspection
+
+**What changed**
+- Playback controls: Reset, Previous, Play/Pause, Next and a tick slider, with a
+  cursor line on the Gantt chart.
+- Inspector for one job: state, base and effective priority, deadline, what it
+  waits for and who owns it, held mutex, CPU left in the current RUN, CPU used,
+  next script step, and whether the deadline has been missed *by that tick*.
+- Tables for all job states and for resources (mutex owner, semaphore permits,
+  ordered waiters), plus running job, ready order and sleeping jobs.
+- Event list around the selected tick. Selecting an event jumps to it.
+- The old "Jobs" table is now titled "Final outcomes" so end-of-run values are
+  not mistaken for the selected tick.
+
+**Why it changed**
+- Plan p.23 (18 Nov task), the p.19 dashboard areas, and the p.25 acceptance test
+  "Snapshot accuracy: slider shows historical state, not final-state leakage",
+  which is assigned to Bavly.
+
+**How it works**
+- All lookups are pure functions (`snapshotAt`, `inspectJob`, `resourcesAt`,
+  `eventsNear`, `describeEvent` and others) with no DOM access, so they are tested
+  in Node. The browser part only renders their results with `textContent`.
+- `snapshotAt` matches the tick exactly. A missing snapshot is reported on the
+  page; state is never taken from a neighbouring tick or from `jobs[].finalState`.
+- A job that is READY before its first RUN exports `cpuBurstRemaining: 0`. Showing
+  0 would look finished, so the view says "not started" when the next step is RUN.
+- Play advances the selected tick with a timer (50 to 600 ms per tick depending on
+  the horizon) and stops at the horizon. It runs no scheduling logic.
+
+**Files affected**
+- `dashboard/app.js`: view functions, tick rendering, playback handlers.
+- `dashboard/index.html`: three-column layout, controls and new tables.
+- `dashboard/styles.css`: layout, cursor, controls, event list.
+- `dashboard/view.test.js`: created.
+- `dashboard/README.md`: usage and interpretation rules.
+
+**Verification**
+- `node dashboard/view.test.js` failed first (`inspectJob is not a function`), then
+  passed. It also checks every tick of all 18 files in `runs/`: the RUNNING row of
+  the snapshot is the job the CPU segment shows.
+- `node dashboard/validate.test.js`: passed.
+- The page was driven in headless Chrome from `file://` (script added in Phase 4):
+  import, slider, buttons, playback and event jumps behaved as expected.

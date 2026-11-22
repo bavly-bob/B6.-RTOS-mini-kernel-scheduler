@@ -49,3 +49,21 @@ td.na { color: var(--muted); font-style: italic; }
 #gantt .idle { fill: var(--idle); }
 #gantt .deadline { stroke: var(--deadline); stroke-width: 2; }
 #gantt .release { stroke: var(--text); stroke-width: 2; }
+.sw.cur { background: var(--accent); width: 3px; }
+#gantt .cursor { stroke: var(--accent); stroke-width: 2; pointer-events: none; }
+.layout { display: grid; gap: 0 12px; grid-template-columns: 200px minmax(0, 1fr) 260px; align-items: start; }
+.two { display: grid; gap: 0 12px; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: start; }
+@media (max-width: 1000px) { .layout, .two { grid-template-columns: minmax(0, 1fr); } }
+.meta.narrow { grid-template-columns: 1fr; margin-top: 8px; }
+.controls { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 8px 0; }
+.controls button { padding: 5px 10px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); color: var(--text); font: inherit; cursor: pointer; }
+.controls button:disabled { opacity: .5; cursor: default; }
+.controls input { flex: 1 1 160px; accent-color: var(--accent); }
+tr.pick { cursor: pointer; }
+tr.selected td { background: var(--bg); font-weight: 600; }
+.events { max-height: 320px; overflow-y: auto; }
+.event { display: flex; gap: 8px; width: 100%; padding: 4px 6px; border: 0; border-left: 3px solid transparent; background: none; color: var(--text); font: inherit; text-align: left; cursor: pointer; }
+.event:hover { background: var(--bg); }
+.event.now { border-left-color: var(--accent); background: var(--bg); }
+.event .when { color: var(--muted); flex: 0 0 48px; }
+.event .type { flex: 0 0 130px; font-weight: 600; }
