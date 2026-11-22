@@ -18,6 +18,12 @@ scheduling decision and computes every metric; the dashboard only displays it.
 - Order is meaningful: `jobs` by job ID, `segments` by time, `events` by
   `(tick, phase, seq)`, `snapshots` by tick, waiter lists by queue order.
 - File size limit: 32 MiB (`exportRunToFile` refuses to report success above it).
+  The default limits do not guarantee this: a run inside every limit can reach
+  about 40.6 MB (38.7 MiB) with 98,049 snapshot rows and 50,000 events, and is then
+  refused with a clear message. 72,036 snapshot rows with the widest values still
+  fit, so `maxSnapshotJobRows` at most 70,000 always gives an importable file
+  (`testFileSizeAtLimits` in `tests/test_run_export.cpp`). All presets are far
+  below this (the largest demo run file is about 62 KB).
 
 ## Top level
 

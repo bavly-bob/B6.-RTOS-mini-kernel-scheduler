@@ -69,6 +69,13 @@ so the dashboard shows an explicit invalid run instead of a partial "ok" one.
   invalid and lists the limit; nothing is dropped silently.
 - Snapshots copy one row per released job per boundary. With the default limits,
   a 2,000-tick horizon fits roughly 50 jobs present from the start; small demo presets are far below this.
+- File size: a run that fills the default snapshot and event limits can reach about
+  38.7 MiB, above the dashboard's 32 MiB import limit; the exporter then reports
+  an error instead of success. With at most 70,000 snapshot rows the file always
+  fits (tested at 72,036 rows with the widest values: 31.8 MiB).
+- Both timer backends export byte-identical runs for every preset and for 40
+  seeded sleep-heavy scenarios with equal wake ticks, batches and suspended
+  sleepers (`tests/test_timer_equivalence.cpp`).
 - Trace and export costs are separate from scheduling-operation costs.
 
 ## Remaining work (19-21 Nov)

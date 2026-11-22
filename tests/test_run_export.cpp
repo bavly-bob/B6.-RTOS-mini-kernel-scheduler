@@ -4,6 +4,7 @@
 // tests/validate_export.js checks with the dashboard's own validator.
 #include "run_exporter.h"
 
+#include <cstdio>
 #include <cstdlib>
 #include <iostream>
 #include <sstream>
@@ -347,6 +348,118 @@ static void testEscapingAndNulls(const char* outputDir) {
     std::cout << "PASS: escaping, null times and invalid status\n";
 }
 
+// ---- File size at the run limits ---------------------------------------------
+// The dashboard refuses files over 32 MiB (kMaxRunFileBytes). This fills a trace
+// to its limits with the widest values each field can hold (4-digit ticks,
+// 3-digit job IDs, the longest reason and data keys the engine emits, every
+// event carrying four data values, ready lists and 16 resources per snapshot).
+static std::size_t g_worstJobs = 0;
+
+static std::size_t worstCaseExport(std::size_t maxSnapshotJobRows, const std::string& path,
+                                   std::string& fileError) {
+    struct NoHooks : ResourceSchedulerHooks {
+        void onBlocked(Job&) override {}
+        void onReady(Job&) override {}
+    };
+    static Scenario s;
+    s = Scenario{};
+    s.config.scenarioId = "worst_case_size";
+    s.config.horizonTicks = kMaxHorizon;
+    s.config.limits.maxSnapshotJobRows = maxSnapshotJobRows;
+    s.taskCount = kMaxTasks;
+    for (std::size_t i = 0; i < kMaxTasks; ++i) {
+        TaskSpec& t = s.tasks[i];
+        t.taskId = static_cast<TaskId>(i);
+        t.name = "task-" + std::to_string(i);
+        t.basePriority = static_cast<int>(10 + i % 22);
+        t.firstRelease = 0;
+        t.periodTicks = i < 20 ? 667 : 0;  // Room for a second release of 20 tasks.
+        t.relativeDeadline = 1999;
+        t.scriptLength = kMaxScriptLength;
+        for (std::size_t k = 0; k + 1 < kMaxScriptLength; ++k) t.script[k] = {OpCode::Run, 1999, {}};
+        t.script[kMaxScriptLength - 1] = {};
+    }
+    s.mutexCount = kMaxResources;
+    s.semaphoreCount = kMaxResources;
+    for (std::size_t r = 0; r < kMaxResources; ++r) {
+        s.mutexes[r] = {static_cast<ResourceId>(r)};
+        s.semaphores[r] = {static_cast<ResourceId>(kMaxResources + r), 0, 1000};
+    }
+    Registry registry(s);
+    // As many jobs as fit a snapshot row at every one of the 2,001 boundaries.
+    const std::size_t jobs = maxSnapshotJobRows / static_cast<std::size_t>(kMaxHorizon + 1);
+    CHECK(jobs > 0 && jobs <= kMaxTasks + 20);
+    g_worstJobs = jobs;
+    for (std::size_t j = 0; j < jobs; ++j) {
+        Job& job = registry.releaseJob(static_cast<TaskId>(j < kMaxTasks ? j : j - kMaxTasks),
+                                       j < kMaxTasks ? 0 : 667);
+        job.firstStartTick = 1999;
+        job.completionTick = 1999;
+        job.state = JobState::Suspended;          // Longest state spelling.
+        job.blockReason = BlockReason::Semaphore;  // Longest wait spelling.
+        job.wakeTick = 1999;
+        job.totalCpuUsed = 1999;
+        job.cpuBurstRemaining = 1999;
+        job.scriptIndex = 63;
+    }
+    NoHooks hooks;
+    ResourceManager resources(registry, hooks);
+    RunTrace trace(s.config);
+    for (std::size_t e = 0; e < s.config.limits.maxEvents; ++e) {
+        const Tick t = static_cast<Tick>(e * static_cast<std::size_t>(kMaxHorizon) / s.config.limits.maxEvents);
+        const Job& job = *registry.findJob(static_cast<JobId>(1 + e % jobs));
+        CHECK(trace.addEvent(TraceEvent::at(t, TickPhase::Stabilize, EventType::PriorityChange,
+                                            "unfinished_at_deadline")
+                                 .job(job).resource(15)
+                                 .with("absoluteDeadline", 1999).with("grantedJobId", 512)
+                                 .with("ownerJobId", 512).flag("stillWaiting", false)));
+    }
+    static JobId ready[kMaxJobs];
+    for (std::size_t j = 0; j < jobs; ++j) ready[j] = static_cast<JobId>(j + 1);
+    for (Tick t = 0; t <= kMaxHorizon; ++t) {
+        CHECK(trace.captureSnapshot(t, std::optional<JobId>(1), ready + 1, jobs - 1, registry, &resources));
+        if (t < kMaxHorizon) trace.recordInterval(t, registry.findJob(static_cast<JobId>(1 + t % jobs)), 31);
+    }
+    CHECK(trace.isValid() && !trace.isTruncated());  // Inside every limit.
+    const RunInfo info{"worst_case_size", "worst case size", RunInfo::Evidence::DesignFixture,
+                       std::string("0123456789abcdef0123456789abcdef01234567"),
+                       std::string("2026-11-22T12:00:00Z")};
+    std::ostringstream out;
+    exportRun(out, info, registry, trace, nullptr);
+    fileError = exportRunToFile(path, info, registry, trace, nullptr);
+    std::remove(path.c_str());
+    return out.str().size();
+}
+
+static void testFileSizeAtLimits(const char* outputDir) {
+    const std::string path = std::string(outputDir ? outputDir : ".") + "/size_check.tmp.json";
+    std::string error;
+
+    // 1. Default limits. Whatever the size, the result is never an oversized
+    //    file reported as a success: it fits, or export fails with a clear message.
+    const std::size_t defaults = RunLimits{}.maxSnapshotJobRows;
+    const std::size_t biggest = worstCaseExport(defaults, path, error);
+    const std::size_t defaultJobs = g_worstJobs;
+    if (biggest > kMaxRunFileBytes) {
+        CHECK(contains(error, "above the dashboard's 32 MiB limit"));
+    } else {
+        CHECK(error.empty());
+    }
+
+    // 2. A snapshot-row limit that always fits: 36 jobs at all 2,001 boundaries
+    //    (72,036 rows). The docs recommend at most 70,000 to leave a margin for
+    //    layouts this test does not build (docs/run-schema-v1.md).
+    const std::size_t safeRows = 36 * static_cast<std::size_t>(kMaxHorizon + 1);
+    const std::size_t safe = worstCaseExport(safeRows, path, error);
+    CHECK(safe <= kMaxRunFileBytes);
+    CHECK(error.empty());
+
+    std::cout << "PASS: file size at the limits: default limits (" << defaultJobs * 2001
+              << " snapshot rows, 50,000 events) = " << biggest << " bytes ("
+              << (biggest > kMaxRunFileBytes ? "over 32 MiB, export refused explicitly" : "fits")
+              << "); " << safeRows << " rows = " << safe << " bytes (fits)\n";
+}
+
 static void testScriptText() {
     TaskSpec t;
     t.scriptLength = 7;
@@ -373,6 +486,7 @@ int main(int argc, char** argv) {
     testSnapshotRowLimit();
     testGoldenTraceA(outputDir);
     testEscapingAndNulls(outputDir);
+    testFileSizeAtLimits(outputDir);
     testScriptText();
     std::cout << "All run export tests passed.\n";
     return 0;
