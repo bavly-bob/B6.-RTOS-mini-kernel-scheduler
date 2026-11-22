@@ -27,6 +27,18 @@ Unknown times are JSON `null`, never 0 or the horizon.
 | `validation.{status, traceTruncated}` | metadata |
 | `events`, `snapshots` | must be arrays; displayed from 18 Nov (slider, inspector) |
 
-Rejected on import: bad JSON, files > 32 MiB, wrong schema version, missing objects/arrays,
-duplicate task/job IDs, jobs referring to unknown tasks, segments referring to unknown jobs,
-malformed/overlapping/out-of-horizon segments, non-integer ticks.
+## Import checks
+
+A file is rejected, with the failing field named, for:
+
+- text that is not JSON, files over 32 MiB, or a `schemaVersion` other than 1;
+- missing objects or arrays, or rows that are not objects;
+- unknown policy, timer backend, state, block reason or event type;
+- `edf` or `rate_monotonic` combined with inheritance, mutexes or semaphores;
+- duplicate task, job or resource IDs, or references to unknown ones;
+- intervals that are negative, empty, overlapping, out of order or past the horizon;
+- events out of `(tick, phase, seq)` order, or snapshot ticks that do not increase;
+- more than one RUNNING job, or a `runningJobId` that disagrees with the rows;
+- semaphore counts outside `0..maxCount`, or a horizon above 2,000 ticks.
+
+A run whose own `validation.status` is `invalid` is still accepted for inspection.
