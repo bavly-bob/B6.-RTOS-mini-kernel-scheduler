@@ -159,3 +159,45 @@ Page numbers refer to the completion plan.
 - The ON fixture's tasks, jobs, segments and 11 snapshots were compared with a run
   from a scratch copy of the engine in which `Scheduler::onPriorityChanged` was
   implemented: identical. That scratch change is not part of this repository.
+
+## Phase 4: Browser checks, offline operation and screenshots
+
+**What changed**
+- `dashboard/browser.check.js` opens `index.html` from disk in headless Chrome/Edge
+  with the network emulated as offline, imports files and uses the page.
+- `demo/screenshots/`: eight real engine runs and the rejected-files message.
+- The Gantt chart fits its card when it can; on longer runs it scrolls with the
+  lane labels pinned. Axis steps are round numbers. Long task names are shortened.
+- The Resources table says "none in this run" instead of being empty.
+
+**Why it changed**
+- Plan p.23 (20 Nov task): test wrong files, unsupported versions, malformed
+  intervals and offline operation, and collect screenshots of real engine runs.
+- The first screenshots showed two defects: lane labels scrolled out of view on
+  `sleep_order`, and a 20-tick run was wider than its card.
+
+**How it works**
+- The script talks to the browser over its DevTools WebSocket using Node built-ins,
+  so it adds no dependency. It fails on any page exception or any request that is
+  not `file:`.
+- It checks: six wrong files (not JSON, wrong version, overlap, two RUNNING jobs,
+  null row, over 32 MiB), a good file next to a bad one, historical state, every
+  playback button, event jumps, idle and unfinished jobs, OFF/ON switching, the
+  invalid-run banner, hostile names shown as text, the sample banner, missing
+  snapshots, long runs and unchanged run settings.
+- Screenshots are named `<runId>-t<tick>` and taken only from `engine_run` files.
+
+**Files affected**
+- `dashboard/browser.check.js`, `demo/screenshots/*.png`: created.
+- `dashboard/app.js`, `dashboard/styles.css`: chart sizing, pinned labels, empty table text.
+- `dashboard/README.md`: how to run the checks.
+
+**Verification**
+- `node dashboard/browser.check.js`: passed in Chrome. The chart assertions were
+  added first and failed before the fix.
+- 15 deliberate faults were put into a copy of `app.js` (for example, final state
+  leaking into the inspector, names inserted as HTML, playback not stopping). One,
+  changed run settings, was not caught; an assertion was added, and all 15 are now
+  caught by the three checks.
+- A generated 30 MiB file at the kernel limits (512 jobs, 100,000 snapshot rows,
+  50,000 events) was parsed and validated in 0.14 s in Node.
