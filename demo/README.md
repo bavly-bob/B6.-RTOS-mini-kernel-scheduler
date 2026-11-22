@@ -22,7 +22,7 @@ exported at engine revision `b2b0837`.
 | 1:00-2:00 | Round-robin, preemption, state inspector | Youssef | `rr_preemption-fixed_priority-heap` |
 | 2:00-3:00 | Same wake order on two timer backends | Sarofem | `sleep_order-fixed_priority-sorted_list`, `-heap` |
 | 3:00-5:00 | Inversion OFF/ON, owner, waiter, priority; semaphore | Moataz | `priority_inversion-fixed_priority-heap`, `semaphore_signal-fixed_priority-heap` |
-| 5:00-6:30 | RM against EDF, deadline result | Marc | `rm_edf_compare-fixed_priority-heap`, `rm_edf_compare-edf-heap` |
+| 5:00-6:30 | RM against EDF, deadline result | Marc | `rm_edf_compare-rate_monotonic-heap`, `rm_edf_compare-edf-heap` |
 | 6:30-8:00 | Inspection, metrics, design, limits, next phase | Bavly | `overload-fixed_priority-heap` |
 
 ## What to click
@@ -42,8 +42,9 @@ shows a banner. L is boosted from 1 to 3 at tick 1 and returns to 1 at 4; H comp
 **Semaphore.** Tick 1: C waits on semaphore 0. Tick 2: P signals and C runs; the count
 stays 0 because the permit goes straight to C.
 
-**RM and EDF.** Go to 7 in the first run, then switch: RM-style misses B0 at 7, EDF has
-finished it at 6. B1 is listed as "not completed" in both.
+**RM and EDF.** Go to 5 in the first run: RM gave A priority 31 and B 30 from their
+periods, so A1 preempts B0. Go to 7, then switch: RM misses B0 at 7, EDF has finished it
+at 6. B1 is listed as "not completed" in both.
 
 **Overload.** Key events lists four misses; *Final outcomes* keeps all nine jobs.
 
@@ -62,7 +63,6 @@ cost, one mutex per job. Inside those limits, every run can be repeated and expl
 
 - `b6_sim --inheritance on` is not connected end to end: the run stops at tick 1 and is
   exported as invalid.
-- The RM-style run uses fixed priorities in period order; `rate_monotonic` is refused.
 - Runs contain no metrics yet, so the metrics card is empty on purpose.
 
 When one of these lands, export the new run, replace the fixture step, run

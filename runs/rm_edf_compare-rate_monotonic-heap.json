@@ -1,0 +1,75 @@
+{
+  "schemaVersion":1,
+  "run":{
+    "runId":"rm_edf_compare-rate_monotonic-heap",
+    "scenarioId":"rm_edf_compare",
+    "label":"Periodic A and B under RM or EDF",
+    "evidenceType":"engine_run",
+    "engineRevision":"f730c7b",
+    "createdAt":null
+  },
+  "config":{
+    "policy":"rate_monotonic",
+    "timerBackend":"heap",
+    "inheritance":false,
+    "quantumTicks":1,
+    "tickMs":1,
+    "horizonTicks":8,
+    "contextSwitchCostTicks":0,
+    "limits":{"maxTasks":32,"maxJobs":512,"maxMutexes":8,"maxSemaphores":8,"maxScriptLength":64,"maxHorizonTicks":2000,"maxEvents":50000,"maxSnapshotJobRows":100000},
+    "restrictions":["single CPU","zero context-switch cost","resource operations take zero CPU time","at most one held mutex per job"]
+  },
+  "tasks":[
+    {"taskId":0,"name":"A","basePriority":31,"firstRelease":0,"periodTicks":5,"relativeDeadline":5,"script":"RUN 2; END"},
+    {"taskId":1,"name":"B","basePriority":30,"firstRelease":0,"periodTicks":7,"relativeDeadline":7,"script":"RUN 4; END"}
+  ],
+  "jobs":[
+    {"jobId":1,"taskId":0,"releaseTick":0,"absoluteDeadline":5,"firstStartTick":0,"completionTick":2,"totalCpuUsed":2,"finalState":"COMPLETED","deadlineMissed":false,"deadlineMissTick":null},
+    {"jobId":2,"taskId":1,"releaseTick":0,"absoluteDeadline":7,"firstStartTick":2,"completionTick":8,"totalCpuUsed":4,"finalState":"COMPLETED","deadlineMissed":true,"deadlineMissTick":7},
+    {"jobId":3,"taskId":0,"releaseTick":5,"absoluteDeadline":10,"firstStartTick":5,"completionTick":7,"totalCpuUsed":2,"finalState":"COMPLETED","deadlineMissed":false,"deadlineMissTick":null},
+    {"jobId":4,"taskId":1,"releaseTick":7,"absoluteDeadline":14,"firstStartTick":null,"completionTick":null,"totalCpuUsed":0,"finalState":"READY","deadlineMissed":false,"deadlineMissTick":null}
+  ],
+  "segments":[
+    {"start":0,"end":2,"jobId":1,"basePriority":31,"effectivePriority":31},
+    {"start":2,"end":5,"jobId":2,"basePriority":30,"effectivePriority":30},
+    {"start":5,"end":7,"jobId":3,"basePriority":31,"effectivePriority":31},
+    {"start":7,"end":8,"jobId":2,"basePriority":30,"effectivePriority":30}
+  ],
+  "events":[
+    {"tick":0,"phase":2,"seq":1,"type":"RELEASE","jobId":1,"taskId":0,"resourceId":null,"reason":"scheduled","data":{"absoluteDeadline":5}},
+    {"tick":0,"phase":2,"seq":2,"type":"RELEASE","jobId":2,"taskId":1,"resourceId":null,"reason":"scheduled","data":{"absoluteDeadline":7}},
+    {"tick":0,"phase":3,"seq":3,"type":"DISPATCH","jobId":1,"taskId":0,"resourceId":null,"reason":"highest_priority","data":{"priority":31}},
+    {"tick":2,"phase":1,"seq":4,"type":"COMPLETE","jobId":1,"taskId":0,"resourceId":null,"reason":"end","data":{"late":false}},
+    {"tick":2,"phase":3,"seq":5,"type":"DISPATCH","jobId":2,"taskId":1,"resourceId":null,"reason":"highest_priority","data":{"priority":30}},
+    {"tick":5,"phase":2,"seq":6,"type":"RELEASE","jobId":3,"taskId":0,"resourceId":null,"reason":"scheduled","data":{"absoluteDeadline":10}},
+    {"tick":5,"phase":3,"seq":7,"type":"PREEMPT","jobId":2,"taskId":1,"resourceId":null,"reason":"higher_priority","data":{"byJobId":3}},
+    {"tick":5,"phase":3,"seq":8,"type":"DISPATCH","jobId":3,"taskId":0,"resourceId":null,"reason":"highest_priority","data":{"priority":31}},
+    {"tick":7,"phase":1,"seq":9,"type":"COMPLETE","jobId":3,"taskId":0,"resourceId":null,"reason":"end","data":{"late":false}},
+    {"tick":7,"phase":2,"seq":10,"type":"RELEASE","jobId":4,"taskId":1,"resourceId":null,"reason":"scheduled","data":{"absoluteDeadline":14}},
+    {"tick":7,"phase":3,"seq":11,"type":"DISPATCH","jobId":2,"taskId":1,"resourceId":null,"reason":"highest_priority","data":{"priority":30}},
+    {"tick":7,"phase":4,"seq":12,"type":"DEADLINE_MISS","jobId":2,"taskId":1,"resourceId":null,"reason":"unfinished_at_deadline","data":{"absoluteDeadline":7}},
+    {"tick":8,"phase":1,"seq":13,"type":"COMPLETE","jobId":2,"taskId":1,"resourceId":null,"reason":"end","data":{"late":true}}
+  ],
+  "snapshots":[
+    {"tick":0,"runningJobId":1,"readyOrder":[2],"jobs":[{"jobId":1,"taskId":0,"state":"RUNNING","suspended":false,"basePriority":31,"effectivePriority":31,"cpuBurstRemaining":2,"totalCpuUsed":0,"scriptIndex":1,"blockReason":"none","blockedResourceId":null,"heldMutexId":null,"wakeTick":null,"deadlineMissed":false},{"jobId":2,"taskId":1,"state":"READY","suspended":false,"basePriority":30,"effectivePriority":30,"cpuBurstRemaining":0,"totalCpuUsed":0,"scriptIndex":0,"blockReason":"none","blockedResourceId":null,"heldMutexId":null,"wakeTick":null,"deadlineMissed":false}],"mutexes":[],"semaphores":[]},
+    {"tick":1,"runningJobId":1,"readyOrder":[2],"jobs":[{"jobId":1,"taskId":0,"state":"RUNNING","suspended":false,"basePriority":31,"effectivePriority":31,"cpuBurstRemaining":1,"totalCpuUsed":1,"scriptIndex":1,"blockReason":"none","blockedResourceId":null,"heldMutexId":null,"wakeTick":null,"deadlineMissed":false},{"jobId":2,"taskId":1,"state":"READY","suspended":false,"basePriority":30,"effectivePriority":30,"cpuBurstRemaining":0,"totalCpuUsed":0,"scriptIndex":0,"blockReason":"none","blockedResourceId":null,"heldMutexId":null,"wakeTick":null,"deadlineMissed":false}],"mutexes":[],"semaphores":[]},
+    {"tick":2,"runningJobId":2,"readyOrder":[],"jobs":[{"jobId":1,"taskId":0,"state":"COMPLETED","suspended":false,"basePriority":31,"effectivePriority":31,"cpuBurstRemaining":0,"totalCpuUsed":2,"scriptIndex":1,"blockReason":"none","blockedResourceId":null,"heldMutexId":null,"wakeTick":null,"deadlineMissed":false},{"jobId":2,"taskId":1,"state":"RUNNING","suspended":false,"basePriority":30,"effectivePriority":30,"cpuBurstRemaining":4,"totalCpuUsed":0,"scriptIndex":1,"blockReason":"none","blockedResourceId":null,"heldMutexId":null,"wakeTick":null,"deadlineMissed":false}],"mutexes":[],"semaphores":[]},
+    {"tick":3,"runningJobId":2,"readyOrder":[],"jobs":[{"jobId":1,"taskId":0,"state":"COMPLETED","suspended":false,"basePriority":31,"effectivePriority":31,"cpuBurstRemaining":0,"totalCpuUsed":2,"scriptIndex":1,"blockReason":"none","blockedResourceId":null,"heldMutexId":null,"wakeTick":null,"deadlineMissed":false},{"jobId":2,"taskId":1,"state":"RUNNING","suspended":false,"basePriority":30,"effectivePriority":30,"cpuBurstRemaining":3,"totalCpuUsed":1,"scriptIndex":1,"blockReason":"none","blockedResourceId":null,"heldMutexId":null,"wakeTick":null,"deadlineMissed":false}],"mutexes":[],"semaphores":[]},
+    {"tick":4,"runningJobId":2,"readyOrder":[],"jobs":[{"jobId":1,"taskId":0,"state":"COMPLETED","suspended":false,"basePriority":31,"effectivePriority":31,"cpuBurstRemaining":0,"totalCpuUsed":2,"scriptIndex":1,"blockReason":"none","blockedResourceId":null,"heldMutexId":null,"wakeTick":null,"deadlineMissed":false},{"jobId":2,"taskId":1,"state":"RUNNING","suspended":false,"basePriority":30,"effectivePriority":30,"cpuBurstRemaining":2,"totalCpuUsed":2,"scriptIndex":1,"blockReason":"none","blockedResourceId":null,"heldMutexId":null,"wakeTick":null,"deadlineMissed":false}],"mutexes":[],"semaphores":[]},
+    {"tick":5,"runningJobId":3,"readyOrder":[2],"jobs":[{"jobId":1,"taskId":0,"state":"COMPLETED","suspended":false,"basePriority":31,"effectivePriority":31,"cpuBurstRemaining":0,"totalCpuUsed":2,"scriptIndex":1,"blockReason":"none","blockedResourceId":null,"heldMutexId":null,"wakeTick":null,"deadlineMissed":false},{"jobId":2,"taskId":1,"state":"READY","suspended":false,"basePriority":30,"effectivePriority":30,"cpuBurstRemaining":1,"totalCpuUsed":3,"scriptIndex":1,"blockReason":"none","blockedResourceId":null,"heldMutexId":null,"wakeTick":null,"deadlineMissed":false},{"jobId":3,"taskId":0,"state":"RUNNING","suspended":false,"basePriority":31,"effectivePriority":31,"cpuBurstRemaining":2,"totalCpuUsed":0,"scriptIndex":1,"blockReason":"none","blockedResourceId":null,"heldMutexId":null,"wakeTick":null,"deadlineMissed":false}],"mutexes":[],"semaphores":[]},
+    {"tick":6,"runningJobId":3,"readyOrder":[2],"jobs":[{"jobId":1,"taskId":0,"state":"COMPLETED","suspended":false,"basePriority":31,"effectivePriority":31,"cpuBurstRemaining":0,"totalCpuUsed":2,"scriptIndex":1,"blockReason":"none","blockedResourceId":null,"heldMutexId":null,"wakeTick":null,"deadlineMissed":false},{"jobId":2,"taskId":1,"state":"READY","suspended":false,"basePriority":30,"effectivePriority":30,"cpuBurstRemaining":1,"totalCpuUsed":3,"scriptIndex":1,"blockReason":"none","blockedResourceId":null,"heldMutexId":null,"wakeTick":null,"deadlineMissed":false},{"jobId":3,"taskId":0,"state":"RUNNING","suspended":false,"basePriority":31,"effectivePriority":31,"cpuBurstRemaining":1,"totalCpuUsed":1,"scriptIndex":1,"blockReason":"none","blockedResourceId":null,"heldMutexId":null,"wakeTick":null,"deadlineMissed":false}],"mutexes":[],"semaphores":[]},
+    {"tick":7,"runningJobId":2,"readyOrder":[4],"jobs":[{"jobId":1,"taskId":0,"state":"COMPLETED","suspended":false,"basePriority":31,"effectivePriority":31,"cpuBurstRemaining":0,"totalCpuUsed":2,"scriptIndex":1,"blockReason":"none","blockedResourceId":null,"heldMutexId":null,"wakeTick":null,"deadlineMissed":false},{"jobId":2,"taskId":1,"state":"RUNNING","suspended":false,"basePriority":30,"effectivePriority":30,"cpuBurstRemaining":1,"totalCpuUsed":3,"scriptIndex":1,"blockReason":"none","blockedResourceId":null,"heldMutexId":null,"wakeTick":null,"deadlineMissed":true},{"jobId":3,"taskId":0,"state":"COMPLETED","suspended":false,"basePriority":31,"effectivePriority":31,"cpuBurstRemaining":0,"totalCpuUsed":2,"scriptIndex":1,"blockReason":"none","blockedResourceId":null,"heldMutexId":null,"wakeTick":null,"deadlineMissed":false},{"jobId":4,"taskId":1,"state":"READY","suspended":false,"basePriority":30,"effectivePriority":30,"cpuBurstRemaining":0,"totalCpuUsed":0,"scriptIndex":0,"blockReason":"none","blockedResourceId":null,"heldMutexId":null,"wakeTick":null,"deadlineMissed":false}],"mutexes":[],"semaphores":[]},
+    {"tick":8,"runningJobId":null,"readyOrder":[4],"jobs":[{"jobId":1,"taskId":0,"state":"COMPLETED","suspended":false,"basePriority":31,"effectivePriority":31,"cpuBurstRemaining":0,"totalCpuUsed":2,"scriptIndex":1,"blockReason":"none","blockedResourceId":null,"heldMutexId":null,"wakeTick":null,"deadlineMissed":false},{"jobId":2,"taskId":1,"state":"COMPLETED","suspended":false,"basePriority":30,"effectivePriority":30,"cpuBurstRemaining":0,"totalCpuUsed":4,"scriptIndex":1,"blockReason":"none","blockedResourceId":null,"heldMutexId":null,"wakeTick":null,"deadlineMissed":true},{"jobId":3,"taskId":0,"state":"COMPLETED","suspended":false,"basePriority":31,"effectivePriority":31,"cpuBurstRemaining":0,"totalCpuUsed":2,"scriptIndex":1,"blockReason":"none","blockedResourceId":null,"heldMutexId":null,"wakeTick":null,"deadlineMissed":false},{"jobId":4,"taskId":1,"state":"READY","suspended":false,"basePriority":30,"effectivePriority":30,"cpuBurstRemaining":0,"totalCpuUsed":0,"scriptIndex":0,"blockReason":"none","blockedResourceId":null,"heldMutexId":null,"wakeTick":null,"deadlineMissed":false}],"mutexes":[],"semaphores":[]}
+  ],
+  "metrics":{
+    "overall":{},
+    "perTask":[]
+  },
+  "validation":{
+    "status":"ok",
+    "error":null,
+    "warnings":["metrics were not computed for this run"],
+    "limitsHit":[],
+    "traceTruncated":false
+  }
+}

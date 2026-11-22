@@ -3,9 +3,9 @@
   "run":{
     "runId":"rm_edf_compare-fixed_priority-heap",
     "scenarioId":"rm_edf_compare",
-    "label":"Periodic A and B under EDF or fixed priority",
+    "label":"Periodic A and B under RM or EDF",
     "evidenceType":"engine_run",
-    "engineRevision":"b2b0837",
+    "engineRevision":"f730c7b",
     "createdAt":null
   },
   "config":{
