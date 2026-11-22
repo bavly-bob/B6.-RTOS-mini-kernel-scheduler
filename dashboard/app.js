@@ -4,58 +4,181 @@
 // All file text is inserted with textContent, never as HTML.
 
 const MAX_FILE_BYTES = 32 * 1024 * 1024;
+const MAX_HORIZON = 2000; // Kernel ceiling (kernel/include/types.h); also bounds the chart size.
 const REQUIRED_ARRAYS = ["tasks", "jobs", "segments", "events", "snapshots"];
 const REQUIRED_OBJECTS = ["run", "config", "metrics", "validation"];
+const POLICIES = ["fixed_priority", "rate_monotonic", "edf"];
+const TIMER_BACKENDS = ["sorted_list", "heap"];
+const STATES = ["READY", "RUNNING", "BLOCKED", "SUSPENDED", "COMPLETED"];
+const BLOCK_REASONS = ["none", "timer", "mutex", "semaphore"];
+const EVENT_TYPES = ["RELEASE", "DISPATCH", "PREEMPT", "BLOCK", "WAKE", "SUSPEND", "RESUME", "COMPLETE",
+  "LOCK", "UNLOCK", "WAIT", "SIGNAL", "PRIORITY_CHANGE", "DEADLINE_MISS", "ERROR"];
 
 const isInt = (v) => Number.isInteger(v);
+const isCount = (v) => Number.isInteger(v) && v >= 0;
 const isIntOrNull = (v) => v === null || Number.isInteger(v);
+const isPriority = (v) => Number.isInteger(v) && v >= 0 && v <= 31;
+const isObj = (v) => v !== null && typeof v === "object" && !Array.isArray(v);
 
 // Returns a list of human-readable problems; an empty list means the run is accepted.
 function validateRun(run) {
   const errs = [];
-  if (run === null || typeof run !== "object" || Array.isArray(run)) return ["Top level must be a JSON object."];
+  const need = (ok, message) => { if (!ok) errs.push(message); return ok; };
+  if (!isObj(run)) return ["Top level must be a JSON object."];
   if (run.schemaVersion !== 1) return [`schemaVersion is ${JSON.stringify(run.schemaVersion)}; this dashboard supports only 1.`];
-  for (const k of REQUIRED_OBJECTS) if (!run[k] || typeof run[k] !== "object" || Array.isArray(run[k])) errs.push(`Missing object "${k}".`);
-  for (const k of REQUIRED_ARRAYS) if (!Array.isArray(run[k])) errs.push(`Missing array "${k}".`);
-  if (errs.length) return errs;
+  for (const k of REQUIRED_OBJECTS) need(isObj(run[k]), `Missing object "${k}".`);
+  for (const k of REQUIRED_ARRAYS)
+    if (need(Array.isArray(run[k]), `Missing array "${k}".`))
+      run[k].forEach((row, i) => need(isObj(row), `${k}[${i}] must be an object.`));
+  if (errs.length) return errs; // Nothing below can be read safely.
 
-  const ev = run.run.evidenceType;
-  if (ev !== "engine_run" && ev !== "design_fixture") errs.push(`run.evidenceType must be "engine_run" or "design_fixture", got ${JSON.stringify(ev)}.`);
-  const horizon = run.config.horizonTicks;
-  if (!isInt(horizon) || horizon < 0) errs.push("config.horizonTicks must be a nonnegative integer.");
+  const c = run.config;
+  const horizon = c.horizonTicks;
+  if (!need(isCount(horizon) && horizon <= MAX_HORIZON, `config.horizonTicks must be an integer from 0 to ${MAX_HORIZON}.`)) return errs;
+  const inRun = (t, from = 0) => isInt(t) && t >= from && t <= horizon;
+
+  need(typeof run.run.runId === "string", "run.runId must be text.");
+  need(["engine_run", "design_fixture"].includes(run.run.evidenceType), `run.evidenceType must be "engine_run" or "design_fixture", got ${JSON.stringify(run.run.evidenceType)}.`);
+  need(POLICIES.includes(c.policy), `config.policy ${JSON.stringify(c.policy)} is not one of ${POLICIES.join(", ")}.`);
+  need(TIMER_BACKENDS.includes(c.timerBackend), `config.timerBackend ${JSON.stringify(c.timerBackend)} is not one of ${TIMER_BACKENDS.join(", ")}.`);
+  need(typeof c.inheritance === "boolean", "config.inheritance must be true or false.");
+  need(isInt(c.quantumTicks) && c.quantumTicks >= 1, "config.quantumTicks must be an integer of at least 1.");
+  if (c.policy !== "fixed_priority")
+    need(c.inheritance !== true, `config: unsupported combination: ${c.policy} with priority inheritance.`);
+
+  const v = run.validation;
+  need(v.status === "ok" || v.status === "invalid", `validation.status must be "ok" or "invalid", got ${JSON.stringify(v.status)}.`);
+  need(!(v.status === "ok" && v.traceTruncated), 'validation.traceTruncated must be false when status is "ok".');
+  need(v.warnings === undefined || Array.isArray(v.warnings), "validation.warnings must be an array.");
 
   const taskIds = new Set();
   run.tasks.forEach((t, i) => {
-    if (!isInt(t.taskId)) errs.push(`tasks[${i}].taskId must be an integer.`);
-    else if (taskIds.has(t.taskId)) errs.push(`tasks[${i}]: duplicate taskId ${t.taskId}.`);
+    if (need(isInt(t.taskId), `tasks[${i}].taskId must be an integer.`))
+      need(!taskIds.has(t.taskId), `tasks[${i}]: duplicate taskId ${t.taskId}.`);
     taskIds.add(t.taskId);
+    need(typeof t.name === "string", `tasks[${i}].name must be text.`);
+    need(isPriority(t.basePriority), `tasks[${i}].basePriority must be an integer from 0 to 31.`);
   });
 
-  const jobIds = new Set();
+  const jobTask = new Map(); // jobId -> taskId
   run.jobs.forEach((j, i) => {
-    if (!isInt(j.jobId)) errs.push(`jobs[${i}].jobId must be an integer.`);
-    else if (jobIds.has(j.jobId)) errs.push(`jobs[${i}]: duplicate jobId ${j.jobId}.`);
-    jobIds.add(j.jobId);
-    if (!taskIds.has(j.taskId)) errs.push(`jobs[${i}]: unknown taskId ${j.taskId}.`);
-    for (const f of ["releaseTick", "absoluteDeadline"]) if (!isInt(j[f])) errs.push(`jobs[${i}].${f} must be an integer.`);
-    for (const f of ["firstStartTick", "completionTick", "deadlineMissTick"]) if (!isIntOrNull(j[f])) errs.push(`jobs[${i}].${f} must be an integer or null.`);
+    if (need(isInt(j.jobId), `jobs[${i}].jobId must be an integer.`))
+      need(!jobTask.has(j.jobId), `jobs[${i}]: duplicate jobId ${j.jobId}.`);
+    jobTask.set(j.jobId, j.taskId);
+    need(taskIds.has(j.taskId), `jobs[${i}]: unknown taskId ${j.taskId}.`);
+    for (const f of ["releaseTick", "absoluteDeadline", "totalCpuUsed"])
+      need(isCount(j[f]), `jobs[${i}].${f} must be a nonnegative integer.`);
+    for (const f of ["firstStartTick", "completionTick", "deadlineMissTick"])
+      if (need(isIntOrNull(j[f]), `jobs[${i}].${f} must be an integer or null.`) && j[f] !== null)
+        need(inRun(j[f], j.releaseTick), `jobs[${i}].${f} ${j[f]} is outside the job's release ${j.releaseTick} to horizon ${horizon}.`);
+    need(STATES.includes(j.finalState), `jobs[${i}].finalState ${JSON.stringify(j.finalState)} is not a known state.`);
+    need(typeof j.deadlineMissed === "boolean", `jobs[${i}].deadlineMissed must be true or false.`);
   });
+  const needJob = (id, where) => need(jobTask.has(id), `${where}: unknown jobId ${id}.`);
 
   let prevEnd = null;
   run.segments.forEach((s, i) => {
-    if (!isInt(s.start) || !isInt(s.end) || s.start < 0 || s.start >= s.end) {
-      errs.push(`segments[${i}]: need integers with 0 <= start < end (got ${s.start}, ${s.end}).`);
-      return;
-    }
-    if (isInt(horizon) && s.end > horizon) errs.push(`segments[${i}]: end ${s.end} is past horizon ${horizon}.`);
-    if (prevEnd !== null && s.start < prevEnd) errs.push(`segments[${i}]: overlaps or is out of order (starts ${s.start}, previous ended ${prevEnd}).`);
+    if (!need(isInt(s.start) && isInt(s.end) && s.start >= 0 && s.start < s.end,
+      `segments[${i}]: need integers with 0 <= start < end (got ${s.start}, ${s.end}).`)) return;
+    need(s.end <= horizon, `segments[${i}]: end ${s.end} is past horizon ${horizon}.`);
+    need(prevEnd === null || s.start >= prevEnd, `segments[${i}]: overlaps or is out of order (starts ${s.start}, previous ended ${prevEnd}).`);
     prevEnd = s.end;
-    if (s.jobId !== null && !jobIds.has(s.jobId)) errs.push(`segments[${i}]: unknown jobId ${s.jobId}.`);
+    if (s.jobId === null) return; // Idle.
+    needJob(s.jobId, `segments[${i}]`);
+    for (const f of ["basePriority", "effectivePriority"])
+      need(isPriority(s[f]), `segments[${i}].${f} must be an integer from 0 to 31.`);
   });
+
+  // Snapshots declare the run's resources, so they are read before the events that refer to them.
+  const resourceIds = new Set();
+  const idList = (ids, where) => {
+    if (!need(Array.isArray(ids), `${where} must be an array.`)) return;
+    need(new Set(ids).size === ids.length, `${where}: contains a duplicate jobId.`);
+    ids.forEach((id) => needJob(id, where));
+  };
+  const rows = (list, where, each) => {
+    if (!need(Array.isArray(list), `${where} must be an array.`)) return;
+    list.forEach((row, i) => { if (need(isObj(row), `${where}[${i}] must be an object.`)) each(row, `${where}[${i}]`); });
+  };
+  let prevTick = -1;
+  run.snapshots.forEach((s, i) => {
+    const at = `snapshots[${i}]`;
+    if (need(inRun(s.tick), `${at}.tick must be an integer from 0 to ${horizon}.`)) {
+      need(s.tick > prevTick, `${at}: ticks must strictly increase (${s.tick} after ${prevTick}).`);
+      prevTick = s.tick;
+    }
+    const here = new Set(); // Resource IDs in this snapshot.
+    const resource = (r, where) => {
+      if (need(isInt(r.resourceId), `${where}.resourceId must be an integer.`))
+        need(!here.has(r.resourceId), `${where}: duplicate resourceId ${r.resourceId}.`);
+      here.add(r.resourceId);
+      resourceIds.add(r.resourceId);
+      idList(r.waiters, `${where}.waiters`);
+    };
+    rows(s.mutexes, `${at}.mutexes`, (m, where) => {
+      resource(m, where);
+      if (m.ownerJobId !== null) needJob(m.ownerJobId, `${where}.ownerJobId`);
+    });
+    rows(s.semaphores, `${at}.semaphores`, (m, where) => {
+      resource(m, where);
+      need(isInt(m.maxCount) && m.maxCount >= 1, `${where}.maxCount must be an integer of at least 1.`);
+      need(isCount(m.count) && m.count <= m.maxCount, `${where}: count ${m.count} must be between 0 and maxCount ${m.maxCount}.`);
+    });
+    const seen = new Set();
+    const running = [];
+    rows(s.jobs, `${at}.jobs`, (j, where) => {
+      if (needJob(j.jobId, where)) need(j.taskId === jobTask.get(j.jobId), `${where}: taskId ${j.taskId} does not match job ${j.jobId}.`);
+      need(!seen.has(j.jobId), `${where}: duplicate jobId ${j.jobId}.`);
+      seen.add(j.jobId);
+      need(STATES.includes(j.state), `${where}.state ${JSON.stringify(j.state)} is not a known state.`);
+      if (j.state === "RUNNING") running.push(j.jobId);
+      for (const f of ["suspended", "deadlineMissed"]) need(typeof j[f] === "boolean", `${where}.${f} must be true or false.`);
+      for (const f of ["basePriority", "effectivePriority"]) need(isPriority(j[f]), `${where}.${f} must be an integer from 0 to 31.`);
+      for (const f of ["cpuBurstRemaining", "totalCpuUsed", "scriptIndex"]) need(isCount(j[f]), `${where}.${f} must be a nonnegative integer.`);
+      need(BLOCK_REASONS.includes(j.blockReason), `${where}.blockReason ${JSON.stringify(j.blockReason)} is not a known reason.`);
+      need(isIntOrNull(j.wakeTick), `${where}.wakeTick must be an integer or null.`);
+      for (const f of ["blockedResourceId", "heldMutexId"])
+        need(j[f] === null || here.has(j[f]), `${where}.${f}: unknown resourceId ${j[f]}.`);
+    });
+    need(running.length <= 1, `${at}: more than one RUNNING job (${running.join(", ")}).`);
+    need((running.length ? running[0] : null) === s.runningJobId, `${at}: runningJobId ${s.runningJobId} does not match its job rows.`);
+    idList(s.readyOrder, `${at}.readyOrder`);
+  });
+  if (c.policy !== "fixed_priority")
+    need(resourceIds.size === 0, `config: unsupported combination: ${c.policy} with mutexes or semaphores.`);
+
+  let prev = null;
+  run.events.forEach((e, i) => {
+    const at = `events[${i}]`;
+    need(inRun(e.tick), `${at}.tick must be an integer from 0 to ${horizon}.`);
+    need(isInt(e.phase) && e.phase >= 1 && e.phase <= 6, `${at}.phase must be an integer from 1 to 6.`);
+    need(isInt(e.seq) && (!prev || e.seq > prev.seq), `${at}.seq must be an integer greater than the previous one.`);
+    need(!prev || e.tick > prev.tick || (e.tick === prev.tick && e.phase >= prev.phase), `${at}: out of order; events must be in (tick, phase, seq) order.`);
+    prev = e;
+    need(EVENT_TYPES.includes(e.type), `${at}.type ${JSON.stringify(e.type)} is not a known event.`);
+    need(typeof e.reason === "string", `${at}.reason must be text.`);
+    need(isObj(e.data), `${at}.data must be an object.`);
+    if (e.jobId !== null) needJob(e.jobId, at);
+    if (e.taskId !== null) need(taskIds.has(e.taskId), `${at}: unknown taskId ${e.taskId}.`);
+    // Without snapshots the file does not list its resources, so only the type can be checked.
+    if (e.resourceId !== null)
+      need(run.snapshots.length ? resourceIds.has(e.resourceId) : isInt(e.resourceId), `${at}: unknown resourceId ${e.resourceId}.`);
+  });
+
+  need(isObj(run.metrics.overall), "metrics.overall must be an object.");
+  rows(run.metrics.perTask, "metrics.perTask", (m, where) => need(taskIds.has(m.taskId), `${where}: unknown taskId ${m.taskId}.`));
   return errs;
 }
 
-if (typeof module !== "undefined") module.exports = { validateRun };
+// Parses and checks one file's text. `data` is usable only when `errors` is empty.
+function parseRun(text) {
+  let data;
+  try { data = JSON.parse(text); }
+  catch (err) { return { data: null, errors: [`not valid JSON (${err.message}). Import a run file written by b6_sim.`] }; }
+  return { data, errors: validateRun(data) };
+}
+
+if (typeof module !== "undefined") module.exports = { validateRun, parseRun };
 
 if (typeof document !== "undefined") {
   const $ = (id) => document.getElementById(id);
@@ -212,11 +335,8 @@ if (typeof document !== "undefined") {
     let lastAdded = -1;
     for (const file of e.target.files) {
       if (file.size > MAX_FILE_BYTES) { problems.push(`${file.name}: ${file.size} bytes exceeds the 32 MiB limit.`); continue; }
-      let data;
-      try { data = JSON.parse(await file.text()); }
-      catch (err) { problems.push(`${file.name}: not valid JSON (${err.message}).`); continue; }
-      const errs = validateRun(data);
-      if (errs.length) { problems.push(`${file.name} rejected:\n  • ${errs.slice(0, 10).join("\n  • ")}${errs.length > 10 ? `\n  • …and ${errs.length - 10} more` : ""}`); continue; }
+      const { data, errors } = parseRun(await file.text());
+      if (errors.length) { problems.push(`${file.name} rejected:\n  • ${errors.slice(0, 10).join("\n  • ")}${errors.length > 10 ? `\n  • …and ${errors.length - 10} more` : ""}`); continue; }
       runs.push({ name: file.name, data });
       lastAdded = runs.length - 1;
     }
