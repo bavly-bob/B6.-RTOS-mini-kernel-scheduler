@@ -11,6 +11,7 @@ see why each job ran, waited or missed its deadline.
 - Component guides: [shared contracts](docs/shared-contracts.md),
   [scheduler](docs/scheduler.md), [resources](docs/resource-manager.md),
   [timers and export](docs/timers-and-export.md), [run-file schema](docs/run-schema-v1.md).
+- [Results](docs/results.md): golden traces against measured runs, metrics, timer costs.
 - [Changelog](CHANGELOG.md) for the dashboard and documentation work.
 
 ## Status

@@ -125,6 +125,13 @@ add_executable(test_metrics tests/test_metrics.cpp)
 target_link_libraries(test_metrics PRIVATE b6_app)
 add_test(NAME metrics COMMAND test_metrics)
 
+# Result tables (docs/results.md): golden-trace comparison and timer costs.
+# Not CTests: b6_timer_cost timings vary by machine. Build Release to time.
+add_executable(b6_golden experiments/golden_compare.cpp)
+target_link_libraries(b6_golden PRIVATE b6_app)
+add_executable(b6_timer_cost experiments/timer_cost.cpp)
+target_link_libraries(b6_timer_cost PRIVATE kernel_timers)
+
 # Every real engine run must also pass the dashboard's own import validator.
 if(NODE_EXECUTABLE)
     add_test(NAME scheduler_runs_dashboard_validation
