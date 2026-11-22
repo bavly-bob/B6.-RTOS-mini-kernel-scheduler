@@ -114,3 +114,48 @@ Page numbers refer to the completion plan.
 - `node dashboard/validate.test.js`: passed.
 - The page was driven in headless Chrome from `file://` (script added in Phase 4):
   import, slider, buttons, playback and event jumps behaved as expected.
+
+## Phase 3: Inversion, policy comparison, metrics and trust notes
+
+**What changed**
+- Gantt chart: boosted intervals are outlined and labelled with the effective
+  priority; a missed deadline is marked where it was recorded.
+- "Key events" list: every `PRIORITY_CHANGE`, `DEADLINE_MISS` and `ERROR` in the
+  run, each jumping to its tick and job.
+- Switching between runs with the same `scenarioId` keeps the tick and job.
+- Metrics have labels and units, "insufficient samples" for jitter, and "not
+  applicable" with the exported reason for the RM bound. A run without metrics
+  says so instead of showing empty tables.
+- Notes above the run: invalid status and its error, limits reached, truncation
+  and exporter warnings.
+- `fixtures/inversion_on.design.json`: golden trace B with inheritance ON.
+
+**Why it changed**
+- Plan p.23 (19 Nov task): show inversion OFF/ON and RM/EDF runs in one viewer with
+  base/effective priority changes and blocking reasons. Plan p.8 asks to inspect
+  the event responsible for a missed deadline or a priority change. Plan p.26
+  fixes how each metric may be presented.
+
+**How it works**
+- `keyEvents`, `overallMetrics`, `taskMetrics` and `runNotes` are pure functions over
+  exported fields. No metric is calculated in JavaScript; values are only rounded
+  to two decimals, and `demandUtilization`/`rmBound` fractions shown as percentages.
+- A boost is `effectivePriority > basePriority` of the exported segment.
+- The ON fixture was derived by hand from plan p.15 and
+  `scenarios/priority_inversion.md`, because the engine on `main` cannot export an ON
+  run yet (see "Baseline"). It is a `design_fixture` and shows the sample banner.
+- `validation.limitsHit` is now iterated, so the importer also checks it is an array.
+
+**Files affected**
+- `dashboard/app.js`, `dashboard/index.html`, `dashboard/styles.css`: the features above;
+  import button text now has enough contrast in dark mode.
+- `dashboard/fixtures/inversion_on.design.json`: created.
+- `dashboard/view.test.js`, `dashboard/validate.test.js`: new cases.
+- `dashboard/README.md`: interpretation rules.
+
+**Verification**
+- `node dashboard/view.test.js` failed first, then passed; `node dashboard/validate.test.js`
+  passed. Both exporter cross-checks in `tests/` passed on a fresh build.
+- The ON fixture's tasks, jobs, segments and 11 snapshots were compared with a run
+  from a scratch copy of the engine in which `Scheduler::onPriorityChanged` was
+  implemented: identical. That scratch change is not part of this repository.

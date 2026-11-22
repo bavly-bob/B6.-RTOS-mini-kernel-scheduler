@@ -57,6 +57,7 @@ rejects((r) => { r.metrics.perTask[0].taskId = 77; }, /metrics\.perTask\[0\].*un
 rejects((r) => { r.metrics.perTask = [null]; }, /metrics\.perTask\[0\] must be an object/);
 rejects((r) => { r.metrics.overall = null; }, /metrics\.overall/);
 rejects((r) => { r.validation.warnings = "none"; }, /validation\.warnings/);
+rejects((r) => { r.validation.limitsHit = "none"; }, /validation\.limitsHit/);
 
 // A null row must be reported, not crash the importer.
 for (const k of ["tasks", "jobs", "segments", "events", "snapshots"])

@@ -2,8 +2,12 @@
 
 Open `dashboard/index.html` directly in a browser (no server, no network, no install).
 Click **Import run(s)** and pick one or more exported run files. Pick a run from the drop-down.
-`fixtures/rr_preemption.design.json` is hand-written golden trace A, labelled `design_fixture`,
-for working before the engine exports real runs.
+
+Hand-written sample data, always shown with a SAMPLE DATA banner:
+
+- `fixtures/rr_preemption.design.json`: golden trace A, without snapshots.
+- `fixtures/inversion_on.design.json`: golden trace B with inheritance ON. It stands in until the engine can
+  export that run; replace it in the demonstration with the real file as soon as one exists.
 
 The page only displays what the file contains. It does not run or re-schedule anything.
 
@@ -16,6 +20,10 @@ Self-checks: `node dashboard/validate.test.js` (import) and `node dashboard/view
 - Select an event to jump to its tick and job.
 - The view at tick `t` is the snapshot recorded at `t`: decisions at `t` have been made, `[t, t+1)` has not run.
   If a file has no snapshot at that tick the page says so; it never borrows another tick's state.
+- A boosted job is outlined in the Gantt chart with its effective priority; a missed deadline is marked ✕.
+- **Key events** lists every priority change, deadline miss and error of the run.
+- Switching to another run of the same scenario (OFF/ON, RM/EDF) keeps the selected tick and job.
+- Metrics come from the file only. If the engine exported none, the page says so and shows none.
 - **Final outcomes** is the only table that shows the end of the run instead of the selected tick.
 - "CPU left in this RUN" is the rest of the current RUN step. "not started" means the step has not been loaded yet.
 
@@ -32,9 +40,9 @@ Unknown times are JSON `null`, never 0 or the horizon.
 | `tasks[].{taskId, name, basePriority, firstRelease, periodTicks, relativeDeadline, script}` | task table, lane names; `script` is a display string |
 | `jobs[].{jobId, taskId, releaseTick, absoluteDeadline, firstStartTick, completionTick, totalCpuUsed, finalState, deadlineMissed, deadlineMissTick}` | one Gantt lane per job, release/deadline markers, job table |
 | `segments[].{start, end, jobId, basePriority, effectivePriority}` | CPU bars; `jobId: null` is idle; sorted, non-overlapping, `0 <= start < end <= horizon` |
-| `metrics.overall` (any key/value pairs) | shown as-is |
+| `metrics.overall` | shown with units; missing values are "not given" or "not applicable" |
 | `metrics.perTask[].{taskId, completedSamples, responseMin, responseMean, responseMax, jitter, misses}` | per-task table; `jitter: null` with < 2 samples shows "insufficient samples" |
-| `validation.{status, traceTruncated}` | metadata |
+| `validation.{status, error, warnings, limitsHit, traceTruncated}` | notes above the run; an invalid run gets a red banner |
 | `snapshots[]` | slider, inspector, job states, resources, ready order and sleepers; looked up by exact `tick` |
 | `events[]` | event list; `type`, `reason`, `resourceId` and `data` are shown as text |
 
