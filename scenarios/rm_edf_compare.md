@@ -23,6 +23,7 @@ Demand is 2/5 + 4/7 = 34/35, about 97.14%. The two-task RM sufficient bound is a
 **Look for:** at 5, RM preempts B0 for A1 because A has the shorter period. EDF keeps
 B0 because its deadline (7) is earlier than A1's (10).
 
-**Status:** `--policy edf` runs. The RM-style trace currently comes from
-`--policy fixed_priority`, because the preset's base priorities already follow period
-order. `--policy rate_monotonic` is refused until RM priority assignment is added.
+**Status:** `--policy rate_monotonic` and `--policy edf` both run. RM ignores the
+preset's base priorities and assigns A 31 and B 30 from the periods
+(`kernel/src/rate_monotonic.cpp`). `--policy fixed_priority` gives the same CPU trace,
+because the preset's own priorities (A 2, B 1) already follow period order.

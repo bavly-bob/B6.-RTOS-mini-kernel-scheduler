@@ -43,6 +43,7 @@ add_test(NAME dynamic_array COMMAND test_dynamic_array)
 add_library(kernel_foundation
     kernel/src/registry.cpp
     kernel/src/validation.cpp
+    kernel/src/rate_monotonic.cpp
 )
 target_include_directories(kernel_foundation PUBLIC kernel/include)
 target_link_libraries(kernel_foundation PUBLIC data_structures)

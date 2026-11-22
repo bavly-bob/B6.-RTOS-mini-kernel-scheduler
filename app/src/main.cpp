@@ -2,7 +2,7 @@
 // run file that the dashboard imports.
 //
 //   b6_sim --list
-//   b6_sim --scenario rr_preemption [--policy fixed_priority|edf]
+//   b6_sim --scenario rr_preemption [--policy fixed_priority|rate_monotonic|edf]
 //          [--timer sorted_list|heap] [--inheritance off|on] [--quantum N]
 //          [--output runs/name.json]
 //
@@ -22,7 +22,8 @@ namespace {
 
 void usage(std::ostream& out) {
     out << "usage: b6_sim --list\n"
-           "       b6_sim --scenario ID [--policy fixed_priority|edf] [--timer sorted_list|heap]\n"
+           "       b6_sim --scenario ID [--policy fixed_priority|rate_monotonic|edf]\n"
+           "              [--timer sorted_list|heap]\n"
            "              [--inheritance off|on] [--quantum N] [--output FILE]\n";
 }
 
@@ -145,14 +146,6 @@ int main(int argc, char** argv) {
     if (timer) config.timerBackend = *timer;
     if (inheritance) config.inheritance = *inheritance;
     if (quantum) config.quantumTicks = *quantum;
-
-    if (config.policy == Policy::RateMonotonic) {
-        std::cerr << "rate_monotonic needs RM priority assignment (shorter period = higher "
-                     "priority), which is Marc's part and not implemented yet.\n"
-                     "The scheduler already dispatches RM runs by priority; use fixed_priority "
-                     "or edf until the assignment is added.\n";
-        return 2;
-    }
 
     std::string runId = scenarioId + "-" + toString(config.policy) + "-" + toString(config.timerBackend);
     if (config.inheritance) runId += "-inheritance";

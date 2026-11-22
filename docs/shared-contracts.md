@@ -15,7 +15,7 @@ Statements below about the foundation's scope do not include that component.
 | Consumer | Interface | Responsibility remaining with the consumer |
 | --- | --- | --- |
 | Youssef | `Registry::releaseJob`, `Job`, `TickPhase` | Visit every due release, ready membership, state transitions, clock and dispatch |
-| Marc | Task periods, job deadlines, release sequence and EDF metadata | Assign RM priorities before registry construction; implement EDF ordering and metrics |
+| Marc | Task periods, job deadlines, release sequence and EDF metadata | RM priorities (done: the registry calls `assignRateMonotonicPriorities` on its copy, before validation and any release); EDF ordering and metrics |
 | Sarofem | `TimerEntry`, job IDs, optional timestamps and run limits | Timer adapters, trace storage, serialization and schema v1 |
 | Bavly | Documented states, IDs, priorities and missing-time meaning | Consume Sarofem's exported schema; never serialize C++ pointers |
 | Moataz (next task) | `MutexRecord`, `SemaphoreRecord`, job wait metadata | Ordered wait queues, ownership transfer, permit accounting and scheduler hooks |

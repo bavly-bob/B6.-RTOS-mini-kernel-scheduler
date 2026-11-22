@@ -1,6 +1,8 @@
+#include "rate_monotonic.h"
 #include "registry.h"
 #include "validation.h"
 #include <cstdlib>
+#include <initializer_list>
 #include <iostream>
 #include <limits>
 #include <stdexcept>
@@ -226,11 +228,78 @@ static void testTimerOrdering() {
     CHECK(firstTie == cancellationKey);
 }
 
+// Periodic copies of the basic task with the given periods, in input order.
+static Scenario periodicScenario(std::initializer_list<Tick> periods) {
+    Scenario s = basicScenario();
+    s.taskCount = 0;
+    for (Tick period : periods) {
+        TaskSpec& t = s.tasks[s.taskCount];
+        t = s.tasks[0];
+        t.taskId = static_cast<TaskId>(s.taskCount);
+        t.name = "T" + std::to_string(s.taskCount);
+        t.basePriority = 3; // Input priorities must be ignored under RM.
+        t.periodTicks = period;
+        t.relativeDeadline = period;
+        ++s.taskCount;
+    }
+    return s;
+}
+
+static void testRateMonotonicAssignment() {
+    // Shortest period first; equal periods share a level; input order is irrelevant.
+    Scenario s = periodicScenario({7, 5, 20, 7});
+    assignRateMonotonicPriorities(s);
+    CHECK(s.tasks[0].basePriority == 30 && s.tasks[1].basePriority == 31);
+    CHECK(s.tasks[2].basePriority == 29 && s.tasks[3].basePriority == 30);
+    Scenario reversed = periodicScenario({7, 20, 5, 7});
+    assignRateMonotonicPriorities(reversed);
+    CHECK(reversed.tasks[0].basePriority == 30 && reversed.tasks[1].basePriority == 29);
+    CHECK(reversed.tasks[2].basePriority == 31 && reversed.tasks[3].basePriority == 30);
+
+    // A longer-period task does not move the existing levels.
+    Scenario longer = periodicScenario({7, 5, 20, 7, 100});
+    assignRateMonotonicPriorities(longer);
+    CHECK(longer.tasks[1].basePriority == 31 && longer.tasks[4].basePriority == 28);
+
+    // 32 distinct periods use every level exactly once, down to 0.
+    Scenario full = basicScenario();
+    for (std::size_t i = 0; i < kMaxTasks; ++i) {
+        full.tasks[i] = full.tasks[0];
+        full.tasks[i].taskId = static_cast<TaskId>(i);
+        full.tasks[i].periodTicks = static_cast<Tick>(kMaxTasks - i); // Longest first.
+    }
+    full.taskCount = kMaxTasks;
+    assignRateMonotonicPriorities(full);
+    CHECK(full.tasks[0].basePriority == 0 && full.tasks[kMaxTasks - 1].basePriority == 31);
+
+    // An oversized count is not indexed past the task array (validation rejects it).
+    full.taskCount = kMaxTasks + 1;
+    assignRateMonotonicPriorities(full);
+    CHECK(full.tasks[0].basePriority == 0);
+
+    // The registry assigns RM priorities on its copy; releases start from them.
+    Scenario rm = periodicScenario({7, 5});
+    rm.config.policy = Policy::RateMonotonic;
+    Registry rmRegistry(rm);
+    CHECK(rm.tasks[0].basePriority == 3); // The caller's scenario is unchanged.
+    CHECK(rmRegistry.findTask(0)->basePriority == 30 && rmRegistry.findTask(1)->basePriority == 31);
+    CHECK(rmRegistry.releaseJob(1, 0).effectivePriority == 31);
+
+    // Fixed priority keeps the input priorities.
+    Scenario fixed = periodicScenario({7, 5});
+    Registry fixedRegistry(fixed);
+    CHECK(fixedRegistry.findTask(0)->basePriority == 3 && fixedRegistry.findTask(1)->basePriority == 3);
+
+    // RM still requires periodic tasks.
+    rejects([](Scenario& bad) { bad.config.policy = Policy::RateMonotonic; }, "periodic");
+}
+
 int main() {
     testValidation();
     testResourceDefinitions();
     testStableRegistryAndOverlappingJobs();
     testReleaseBoundariesAndCapacity();
     testTimerOrdering();
+    testRateMonotonicAssignment();
     std::cout << "All kernel foundation tests passed.\n";
 }

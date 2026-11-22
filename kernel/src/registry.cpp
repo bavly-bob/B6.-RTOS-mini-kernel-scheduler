@@ -1,10 +1,14 @@
 #include "registry.h"
+#include "rate_monotonic.h"
 #include "validation.h"
 #include <stdexcept>
 
 namespace b6 {
 
 Registry::Registry(const Scenario& scenario) : scenario_(scenario) {
+    // RM priorities are set on this copy before validation and before any task
+    // is published, so every job starts from its assigned base priority.
+    if (scenario_.config.policy == Policy::RateMonotonic) assignRateMonotonicPriorities(scenario_);
     const std::string error = validateScenario(scenario_);
     if (!error.empty()) throw std::invalid_argument(error);
     // Reserve bucket arrays before releases; map nodes still allocate on put().

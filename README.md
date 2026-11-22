@@ -18,10 +18,10 @@ see why each job ran, waited or missed its deadline.
 | Part | State |
 | --- | --- |
 | Data structures, registry, validation, resources, both timers, trace, export | Implemented and tested |
-| Fixed priority, round-robin, EDF, suspend/resume, seven presets, `b6_sim` | Implemented and tested |
+| Fixed priority, round-robin, rate monotonic, EDF, suspend/resume, seven presets, `b6_sim` | Implemented and tested |
 | Dashboard import checks, playback, inspector, events, resources | Implemented and tested |
 | Priority inheritance | Resource rules done; the scheduler does not yet implement `onPriorityChanged`, so `--inheritance on` stops with an invalid run and the `scheduler` test fails |
-| Rate-monotonic priority assignment, metrics | Not implemented; `rate_monotonic` is refused and runs carry no metrics |
+| Metrics | Not implemented; runs carry no metrics |
 
 ## Build and test
 
@@ -62,12 +62,13 @@ node dashboard/browser.check.js
 ./build/b6_sim --list
 ./build/b6_sim --scenario rr_preemption --policy fixed_priority --timer heap
 ./build/b6_sim --scenario priority_inversion --inheritance off
+./build/b6_sim --scenario rm_edf_compare --policy rate_monotonic --timer heap
 ./build/b6_sim --scenario rm_edf_compare --policy edf --output runs/edf.json
 ```
 
 With a multi-configuration generator the program is in `build/Debug/`.
 
-Options: `--policy fixed_priority|edf`, `--timer sorted_list|heap`,
+Options: `--policy fixed_priority|rate_monotonic|edf`, `--timer sorted_list|heap`,
 `--inheritance off|on`, `--quantum N`, `--output FILE` (default
 `runs/<scenario>-<policy>-<timer>.json`). The program prints the CPU timeline
 and each job's outcome, then writes the run file. Exit code 0 means a valid run,

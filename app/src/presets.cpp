@@ -100,9 +100,10 @@ void priorityInversion(ScenarioInput& in) {
 }
 
 // E. Periodic A (C=2, T=D=5) and B (C=4, T=D=7), horizon 8. Default policy
-// EDF: A0[0,2) B0[2,6) A1[6,8); B0 completes 6 (deadline 7 met). The base
-// priorities follow period order, so fixed_priority shows the RM-style
-// result A0[0,2) B0[2,5) A1[5,7) B0[7,8), B0 completes 8 and misses at 7.
+// EDF: A0[0,2) B0[2,6) A1[6,8); B0 completes 6 (deadline 7 met). Under
+// rate_monotonic, A (shorter period) gets 31 and B 30: A0[0,2) B0[2,5)
+// A1[5,7) B0[7,8), B0 completes 8 and misses at 7. The base priorities below
+// follow period order too, so fixed_priority gives the same CPU trace.
 void rmEdfCompare(ScenarioInput& in) {
     begin(in, "rm_edf_compare", 8, Policy::EDF);
     task(in, 0, "A", 2, 0, 5, 5, {RUN(2), END()});
@@ -123,7 +124,7 @@ const Preset kPresets[] = {
     {"suspend_resume", "Suspending a ready job and a sleeping job", suspendResume},
     {"semaphore_signal", "Consumer waits until the producer signals", semaphoreSignal},
     {"priority_inversion", "L holds a mutex, H blocks, M interferes", priorityInversion},
-    {"rm_edf_compare", "Periodic A and B under EDF or fixed priority", rmEdfCompare},
+    {"rm_edf_compare", "Periodic A and B under RM or EDF", rmEdfCompare},
     {"overload", "Demand above 100%: deadline misses and backlog", overload},
 };
 
