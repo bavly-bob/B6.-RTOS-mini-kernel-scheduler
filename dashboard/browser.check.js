@@ -193,8 +193,17 @@ async function main() {
   assert.match(await text("keyEvents"), /t=6\s+DEADLINE_MISS\s+H · job 2/);
   assert.strictEqual(await js("document.querySelectorAll('#gantt .miss').length"), 1);
   assert.strictEqual(await js("document.querySelectorAll('#gantt rect.boosted').length"), 0);
+  assert.strictEqual(await js(`document.getElementById("noMetrics").hidden`), true);
+  assert.match(await text("overall"), /90% \(9 of 10 ticks\)/);
+  assert.match(await text("overall"), /not applicable: one-shot tasks/);
+  // A run without metrics says so instead of showing empty tables.
+  await importFiles([broken("no_metrics.json", (r) => {
+    r.metrics = { overall: {}, perTask: [] };
+    r.validation.warnings = ["metrics were not computed for this run"];
+  })]);
   assert.strictEqual(await js(`document.getElementById("noMetrics").hidden`), false);
   assert.match(await text("runNotes"), /metrics were not computed/);
+  await importFiles([inversion]);
   await importFiles([path.join(__dirname, "fixtures", "inversion_on.design.json")]);
   assert.strictEqual(await text("tickLabel"), "tick 3 of 10");
   await expect("Job", "L · job 1");

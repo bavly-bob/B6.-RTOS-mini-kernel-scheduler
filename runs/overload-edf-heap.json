@@ -5,7 +5,7 @@
     "scenarioId":"overload",
     "label":"Demand above 100%: deadline misses and backlog",
     "evidenceType":"engine_run",
-    "engineRevision":"b2b0837",
+    "engineRevision":"b5dfd58",
     "createdAt":null
   },
   "config":{
@@ -99,13 +99,13 @@
     {"tick":20,"runningJobId":7,"readyOrder":[8,9],"jobs":[{"jobId":1,"taskId":0,"state":"COMPLETED","suspended":false,"basePriority":2,"effectivePriority":2,"cpuBurstRemaining":0,"totalCpuUsed":3,"scriptIndex":1,"blockReason":"none","blockedResourceId":null,"heldMutexId":null,"wakeTick":null,"deadlineMissed":false},{"jobId":2,"taskId":1,"state":"COMPLETED","suspended":false,"basePriority":1,"effectivePriority":1,"cpuBurstRemaining":0,"totalCpuUsed":3,"scriptIndex":1,"blockReason":"none","blockedResourceId":null,"heldMutexId":null,"wakeTick":null,"deadlineMissed":true},{"jobId":3,"taskId":0,"state":"COMPLETED","suspended":false,"basePriority":2,"effectivePriority":2,"cpuBurstRemaining":0,"totalCpuUsed":3,"scriptIndex":1,"blockReason":"none","blockedResourceId":null,"heldMutexId":null,"wakeTick":null,"deadlineMissed":true},{"jobId":4,"taskId":1,"state":"COMPLETED","suspended":false,"basePriority":1,"effectivePriority":1,"cpuBurstRemaining":0,"totalCpuUsed":3,"scriptIndex":1,"blockReason":"none","blockedResourceId":null,"heldMutexId":null,"wakeTick":null,"deadlineMissed":true},{"jobId":5,"taskId":0,"state":"COMPLETED","suspended":false,"basePriority":2,"effectivePriority":2,"cpuBurstRemaining":0,"totalCpuUsed":3,"scriptIndex":1,"blockReason":"none","blockedResourceId":null,"heldMutexId":null,"wakeTick":null,"deadlineMissed":true},{"jobId":6,"taskId":1,"state":"COMPLETED","suspended":false,"basePriority":1,"effectivePriority":1,"cpuBurstRemaining":0,"totalCpuUsed":3,"scriptIndex":1,"blockReason":"none","blockedResourceId":null,"heldMutexId":null,"wakeTick":null,"deadlineMissed":true},{"jobId":7,"taskId":0,"state":"RUNNING","suspended":false,"basePriority":2,"effectivePriority":2,"cpuBurstRemaining":1,"totalCpuUsed":2,"scriptIndex":1,"blockReason":"none","blockedResourceId":null,"heldMutexId":null,"wakeTick":null,"deadlineMissed":true},{"jobId":8,"taskId":1,"state":"READY","suspended":false,"basePriority":1,"effectivePriority":1,"cpuBurstRemaining":0,"totalCpuUsed":0,"scriptIndex":0,"blockReason":"none","blockedResourceId":null,"heldMutexId":null,"wakeTick":null,"deadlineMissed":true},{"jobId":9,"taskId":0,"state":"READY","suspended":false,"basePriority":2,"effectivePriority":2,"cpuBurstRemaining":0,"totalCpuUsed":0,"scriptIndex":0,"blockReason":"none","blockedResourceId":null,"heldMutexId":null,"wakeTick":null,"deadlineMissed":true}],"mutexes":[],"semaphores":[]}
   ],
   "metrics":{
-    "overall":{},
-    "perTask":[]
+    "overall":{"busyTicks":20,"observedTicks":20,"busyPercent":100,"completedJobs":6,"unfinishedJobs":3,"deadlineMisses":8,"demandUtilization":1.35,"rmBound":null,"rmBoundApplicable":false,"rmBoundNote":"policy is edf, not rate_monotonic"},
+    "perTask":[{"taskId":0,"completedSamples":3,"responseMin":3,"responseMean":5,"responseMax":7,"jitter":4,"misses":4},{"taskId":1,"completedSamples":3,"responseMin":6,"responseMean":7,"responseMax":8,"jitter":2,"misses":4}]
   },
   "validation":{
     "status":"ok",
     "error":null,
-    "warnings":["metrics were not computed for this run"],
+    "warnings":[],
     "limitsHit":[],
     "traceTruncated":false
   }

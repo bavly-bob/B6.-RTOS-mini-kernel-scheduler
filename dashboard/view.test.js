@@ -119,8 +119,21 @@ assert.deepStrictEqual(keyEvents(rmStyle).map((e) => [e.tick, e.type, e.jobId]),
 assert.deepStrictEqual(keyEvents(edf), []);
 
 // Metrics are shown only as exported; nothing is filled in.
-assert.deepStrictEqual(overallMetrics(inversion), []);
-assert.deepStrictEqual(taskMetrics(inversion), []);
+const noMetrics = structuredClone(inversion);
+noMetrics.metrics = { overall: {}, perTask: [] };
+noMetrics.validation.warnings = ["metrics were not computed for this run"];
+assert.deepStrictEqual(overallMetrics(noMetrics), []);
+assert.deepStrictEqual(taskMetrics(noMetrics), []);
+// Engine-computed metrics of real runs (app/src/metrics.cpp).
+assert.deepStrictEqual(overallMetrics(inversion), [["CPU busy", "90% (9 of 10 ticks)"], ["Completed jobs", 3], ["Unfinished jobs", 0], ["Deadline misses", 1],
+  ["Periodic demand", "not applicable"], ["RM sufficient bound", "not applicable: one-shot tasks"]]);
+assert.deepStrictEqual(taskMetrics(inversion), [["L", 1, 8, 8, 8, "insufficient samples", 0], ["H", 1, 8, 8, 8, "insufficient samples", 1],
+  ["M", 1, 4, 4, 4, "insufficient samples", 0]]);
+const rm = runFile("rm_edf_compare-rate_monotonic-heap");
+assert.deepStrictEqual(overallMetrics(rm), [["CPU busy", "100% (8 of 8 ticks)"], ["Completed jobs", 3], ["Unfinished jobs", 1], ["Deadline misses", 1],
+  ["Periodic demand", "97.14%"], ["RM sufficient bound", "82.84%: demand above the bound is inconclusive"]]);
+assert.deepStrictEqual(taskMetrics(rm), [["A", 2, 2, 2, 2, 0, 0], ["B", 1, 8, 8, 8, "insufficient samples", 1]]);
+assert.deepStrictEqual(overallMetrics(edf).slice(-1), [["RM sufficient bound", "not applicable: policy is edf, not rate_monotonic"]]);
 assert.deepStrictEqual(overallMetrics(on), [["CPU busy", "90% (9 of 10 ticks)"], ["Completed jobs", 3], ["Unfinished jobs", 0], ["Deadline misses", 0],
   ["Periodic demand", "not applicable"], ["RM sufficient bound", "not applicable: one-shot tasks that share a mutex"]]);
 const withBound = { metrics: { overall: { busyTicks: 8, observedTicks: 8, busyPercent: 100, completedJobs: 3, unfinishedJobs: 1, deadlineMisses: 1,
@@ -137,7 +150,8 @@ assert.deepStrictEqual(taskMetrics(samples), [["L", 0, "no completed job", "no c
 
 // Trust notes: a clean run has none; anything else is stated.
 assert.deepStrictEqual(runNotes(on), []);
-assert.deepStrictEqual(runNotes(inversion), ["Warning: metrics were not computed for this run"]);
+assert.deepStrictEqual(runNotes(inversion), []);
+assert.deepStrictEqual(runNotes(noMetrics), ["Warning: metrics were not computed for this run"]);
 const stopped = structuredClone(inversion);
 stopped.validation = { status: "invalid", error: "event limit", warnings: [], limitsHit: ["maxEvents"], traceTruncated: true };
 assert.deepStrictEqual(runNotes(stopped), ["INVALID RUN, do not use as evidence: event limit", "Limit reached: maxEvents", "The trace is truncated: some records are missing."]);

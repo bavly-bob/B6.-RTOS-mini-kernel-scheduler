@@ -5,7 +5,7 @@
     "scenarioId":"priority_inversion",
     "label":"L holds a mutex, H blocks, M interferes",
     "evidenceType":"engine_run",
-    "engineRevision":"b2b0837",
+    "engineRevision":"b5dfd58",
     "createdAt":null
   },
   "config":{
@@ -72,13 +72,13 @@
     {"tick":10,"runningJobId":null,"readyOrder":[],"jobs":[{"jobId":1,"taskId":0,"state":"COMPLETED","suspended":false,"basePriority":1,"effectivePriority":1,"cpuBurstRemaining":0,"totalCpuUsed":4,"scriptIndex":3,"blockReason":"none","blockedResourceId":null,"heldMutexId":null,"wakeTick":null,"deadlineMissed":false},{"jobId":2,"taskId":1,"state":"COMPLETED","suspended":false,"basePriority":3,"effectivePriority":3,"cpuBurstRemaining":0,"totalCpuUsed":1,"scriptIndex":3,"blockReason":"none","blockedResourceId":null,"heldMutexId":null,"wakeTick":null,"deadlineMissed":true},{"jobId":3,"taskId":2,"state":"COMPLETED","suspended":false,"basePriority":2,"effectivePriority":2,"cpuBurstRemaining":0,"totalCpuUsed":4,"scriptIndex":1,"blockReason":"none","blockedResourceId":null,"heldMutexId":null,"wakeTick":null,"deadlineMissed":false}],"mutexes":[{"resourceId":0,"ownerJobId":null,"waiters":[]}],"semaphores":[]}
   ],
   "metrics":{
-    "overall":{},
-    "perTask":[]
+    "overall":{"busyTicks":9,"observedTicks":10,"busyPercent":90,"completedJobs":3,"unfinishedJobs":0,"deadlineMisses":1,"demandUtilization":null,"rmBound":null,"rmBoundApplicable":false,"rmBoundNote":"one-shot tasks"},
+    "perTask":[{"taskId":0,"completedSamples":1,"responseMin":8,"responseMean":8,"responseMax":8,"jitter":null,"misses":0},{"taskId":1,"completedSamples":1,"responseMin":8,"responseMean":8,"responseMax":8,"jitter":null,"misses":1},{"taskId":2,"completedSamples":1,"responseMin":4,"responseMean":4,"responseMax":4,"jitter":null,"misses":0}]
   },
   "validation":{
     "status":"ok",
     "error":null,
-    "warnings":["metrics were not computed for this run"],
+    "warnings":[],
     "limitsHit":[],
     "traceTruncated":false
   }
