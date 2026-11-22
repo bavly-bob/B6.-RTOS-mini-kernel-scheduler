@@ -1,4 +1,5 @@
 #include "simulation.h"
+#include "metrics.h"
 
 #include <stdexcept>
 
@@ -26,12 +27,19 @@ bool Simulation::run() {
     return trace_.isValid();
 }
 
+std::optional<RunMetrics> Simulation::metrics() const {
+    if (!trace_.isValid()) return std::nullopt;
+    return computeMetrics(registry_, trace_);
+}
+
 std::string Simulation::exportTo(const std::string& path, const RunInfo& info) const {
-    return exportRunToFile(path, info, registry_, trace_, nullptr);
+    const std::optional<RunMetrics> m = metrics();
+    return exportRunToFile(path, info, registry_, trace_, m ? &*m : nullptr);
 }
 
 void Simulation::exportTo(std::ostream& out, const RunInfo& info) const {
-    exportRun(out, info, registry_, trace_, nullptr);
+    const std::optional<RunMetrics> m = metrics();
+    exportRun(out, info, registry_, trace_, m ? &*m : nullptr);
 }
 
 } // namespace b6

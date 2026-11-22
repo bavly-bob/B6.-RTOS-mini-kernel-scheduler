@@ -105,7 +105,7 @@ add_library(kernel_scheduler kernel/src/scheduler.cpp)
 target_link_libraries(kernel_scheduler PUBLIC kernel_resources kernel_timers kernel_trace)
 
 # Application layer: one-run Simulation wrapper and the named preset scenarios.
-add_library(b6_app app/src/simulation.cpp app/src/presets.cpp)
+add_library(b6_app app/src/simulation.cpp app/src/presets.cpp app/src/metrics.cpp)
 target_include_directories(b6_app PUBLIC app/include)
 target_link_libraries(b6_app PUBLIC kernel_scheduler run_export)
 
@@ -119,6 +119,11 @@ add_executable(test_scheduler tests/test_scheduler.cpp)
 target_link_libraries(test_scheduler PRIVATE b6_app)
 add_test(NAME scheduler
          COMMAND test_scheduler ${CMAKE_CURRENT_BINARY_DIR}/scheduler_runs)
+
+# Metrics: response, misses, jitter, utilization and RM bound applicability.
+add_executable(test_metrics tests/test_metrics.cpp)
+target_link_libraries(test_metrics PRIVATE b6_app)
+add_test(NAME metrics COMMAND test_metrics)
 
 # Every real engine run must also pass the dashboard's own import validator.
 if(NODE_EXECUTABLE)

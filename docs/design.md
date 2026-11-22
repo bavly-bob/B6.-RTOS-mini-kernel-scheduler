@@ -145,7 +145,6 @@ Design choices on the dashboard side:
 | Item | Component owner (plan pp. 19-22) | Effect today |
 | --- | --- | --- |
 | `Scheduler::onPriorityChanged` | Youssef / Moataz | `--inheritance on` stops at tick 1 with an explicit invalid run, and the `scheduler` CTest fails. Resource-level inheritance is implemented and tested. |
-| Metrics calculation | Marc | Runs carry no metrics; the page says so. |
 | Timer cost experiment | Marc / Sarofem | No cost figures are claimed. |
 
 This is a simulation for study. It makes no hardware timing or safety claim.

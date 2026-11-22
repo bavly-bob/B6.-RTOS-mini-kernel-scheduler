@@ -63,7 +63,6 @@ cost, one mutex per job. Inside those limits, every run can be repeated and expl
 
 - `b6_sim --inheritance on` is not connected end to end: the run stops at tick 1 and is
   exported as invalid.
-- Runs contain no metrics yet, so the metrics card is empty on purpose.
 
 When one of these lands, export the new run, replace the fixture step, run
 `node dashboard/browser.check.js demo/screenshots`, and update this list.

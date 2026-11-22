@@ -19,9 +19,9 @@ see why each job ran, waited or missed its deadline.
 | --- | --- |
 | Data structures, registry, validation, resources, both timers, trace, export | Implemented and tested |
 | Fixed priority, round-robin, rate monotonic, EDF, suspend/resume, seven presets, `b6_sim` | Implemented and tested |
+| Metrics: response times, misses, jitter, observed utilization, demand, RM bound applicability | Implemented and tested; exported with every valid run |
 | Dashboard import checks, playback, inspector, events, resources | Implemented and tested |
 | Priority inheritance | Resource rules done; the scheduler does not yet implement `onPriorityChanged`, so `--inheritance on` stops with an invalid run and the `scheduler` test fails |
-| Metrics | Not implemented; runs carry no metrics |
 
 ## Build and test
 

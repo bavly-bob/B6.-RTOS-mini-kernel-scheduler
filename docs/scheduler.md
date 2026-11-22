@@ -174,4 +174,3 @@ if a measured need appears (for example, ordered range queries over timers).
 | Missing | Owner | Effect today |
 | --- | --- | --- |
 | Priority inheritance (donation and restore) | Moataz | `--inheritance on` is refused with a clear message; the hook it needs exists. |
-| Metrics (response, jitter, utilization) | Marc | Runs export without metrics; the exporter adds a warning. |

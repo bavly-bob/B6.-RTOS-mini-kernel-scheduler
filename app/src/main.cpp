@@ -68,6 +68,30 @@ void printSummary(const Simulation& sim) {
         if (j.deadlineMissRecorded) std::cout << ", MISSED deadline at " << *j.deadlineMissTick;
         std::cout << '\n';
     }
+
+    const std::optional<RunMetrics> m = sim.metrics();
+    if (!m) return;
+    std::cout << "Metrics:\n  CPU busy " << m->busyTicks << " of " << m->observedTicks << " ticks ("
+              << *m->busyPercent << "%), completed " << m->completedJobs << ", unfinished "
+              << m->unfinishedJobs << ", deadline misses " << m->deadlineMisses << '\n';
+    std::cout << "  demand ";
+    if (m->demandUtilization) std::cout << *m->demandUtilization * 100 << '%';
+    else std::cout << "not applicable";
+    std::cout << ", RM bound ";
+    if (m->rmBound) std::cout << *m->rmBound * 100 << '%';
+    else std::cout << "not applicable";
+    std::cout << " (" << m->rmBoundNote << ")\n";
+    for (std::size_t i = 0; i < m->taskCount; ++i) {
+        const TaskMetrics& t = m->perTask[i];
+        std::cout << "  " << registry.findTask(t.taskId)->name << ": " << t.completedSamples << " completed";
+        if (t.completedSamples > 0)
+            std::cout << ", response min " << *t.responseMin << " mean " << *t.responseMean
+                      << " max " << *t.responseMax;
+        std::cout << ", jitter ";
+        if (t.jitter) std::cout << *t.jitter;
+        else std::cout << "insufficient samples";
+        std::cout << ", misses " << t.misses << '\n';
+    }
 }
 
 bool parsePolicy(const std::string& text, Policy& out) {
