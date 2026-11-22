@@ -1,23 +1,27 @@
-﻿# B6 RTOS mini-kernel scheduler
+# B6 RTOS mini-kernel scheduler
 
-A C++17 educational scheduler simulator under construction. Existing custom data
-structures provide storage; the new kernel foundation supplies shared task/job
-records, a stable registry and scenario validation.
+A C++17 educational scheduler simulator with a local dashboard. The C++ engine runs
+a named scenario and exports one JSON file; the dashboard replays that file so you can
+see why each job ran, waited or missed its deadline.
 
-Start with [the shared contracts](docs/shared-contracts.md) for Moataz's first
-handoff, field meanings, ownership rules, supported inputs and team integration.
-Mutex ownership, semaphore permits and ordered waiters are now implemented in
-`kernel_resources`. See [the resource integration guide](docs/resource-manager.md)
-and [producer/consumer oracle](scenarios/semaphore_signal.md). Timers (sorted-list
-and heap backends), bounded trace recording and the JSON run exporter are in
-`kernel_timers`, `kernel_trace` and `run_export`; see
-[the timer/export integration guide](docs/timers-and-export.md) and
-[the run-file contract](docs/run-schema-v1.md). The scheduler (clock, priority
-rings with the bitmap, round-robin, EDF, script steps, suspend/resume) and the
-`b6_sim` program are in `kernel_scheduler`, `b6_app` and `b6_sim`; see
-[the scheduler guide](docs/scheduler.md). Real engine runs are in `runs/`.
-Not implemented yet: priority inheritance (Moataz), RM priority assignment and
-metrics (Marc). `b6_sim` refuses those modes with a clear message.
+- [Design](docs/design.md): how everything fits together, costs and trade-offs.
+- [Scenarios](scenarios/README.md): what each preset shows and must produce.
+- [Demonstration](demo/README.md): steps, files to import and screenshots.
+- [Dashboard](dashboard/README.md): how to read it and which files it rejects.
+- Component guides: [shared contracts](docs/shared-contracts.md),
+  [scheduler](docs/scheduler.md), [resources](docs/resource-manager.md),
+  [timers and export](docs/timers-and-export.md), [run-file schema](docs/run-schema-v1.md).
+- [Changelog](CHANGELOG.md) for the dashboard and documentation work.
+
+## Status
+
+| Part | State |
+| --- | --- |
+| Data structures, registry, validation, resources, both timers, trace, export | Implemented and tested |
+| Fixed priority, round-robin, EDF, suspend/resume, seven presets, `b6_sim` | Implemented and tested |
+| Dashboard import checks, playback, inspector, events, resources | Implemented and tested |
+| Priority inheritance | Resource rules done; the scheduler does not yet implement `onPriorityChanged`, so `--inheritance on` stops with an invalid run and the `scheduler` test fails |
+| Rate-monotonic priority assignment, metrics | Not implemented; `rate_monotonic` is refused and runs carry no metrics |
 
 ## Build and test
 
@@ -44,6 +48,14 @@ registered in CMake. If Node.js is installed, `run_export_dashboard_validation`
 also checks exported run files with the dashboard's own validator. A passing
 suite only covers the exercised paths; it does not imply the scheduler works.
 
+Dashboard checks need only Node.js (22+ and Chrome or Edge for the last one):
+
+```sh
+node dashboard/validate.test.js
+node dashboard/view.test.js
+node dashboard/browser.check.js
+```
+
 ## Run the simulator
 
 ```sh
@@ -53,12 +65,29 @@ suite only covers the exercised paths; it does not imply the scheduler works.
 ./build/b6_sim --scenario rm_edf_compare --policy edf --output runs/edf.json
 ```
 
+With a multi-configuration generator the program is in `build/Debug/`.
+
 Options: `--policy fixed_priority|edf`, `--timer sorted_list|heap`,
 `--inheritance off|on`, `--quantum N`, `--output FILE` (default
 `runs/<scenario>-<policy>-<timer>.json`). The program prints the CPU timeline
-and each job's outcome, then writes the run file. Open `dashboard/index.html`,
-click **Import run(s)** and choose the file. Exit code 0 means a valid run,
+and each job's outcome, then writes the run file. Exit code 0 means a valid run,
 1 an invalid run (still written, for inspection), 2 a bad option or scenario.
+
+## View a run
+
+1. Open `dashboard/index.html` in a browser. No server, installation or network is needed.
+2. Click **Import run(s)** and choose one or more files from `runs/`.
+3. Pick a run, then use Play, Next, Previous or the slider, and choose a job to inspect.
+
+The page replays a recording; it never runs or changes the schedule. To try another
+setting, run `b6_sim` again and import the new file.
+
+## Model restrictions
+
+One CPU, integer ticks, zero switching cost, zero-time resource operations, at most one
+held mutex per job. Mutexes, semaphores and inheritance need fixed priority; EDF and RM
+need independent periodic jobs. Limits: 32 tasks, 512 jobs, 8 mutexes, 8 semaphores,
+2,000 ticks, 50,000 events, 100,000 snapshot rows. Exceeding one is an explicit error.
 
 ## Layout
 
@@ -80,6 +109,10 @@ click **Import run(s)** and choose the file. Exit code 0 means a valid run,
 - `tests/test_scheduler.cpp`, `tests/validate_runs.js`: golden traces, invariants,
   both timer backends, repeatability, errors; dashboard check of real runs.
 - `docs/scheduler.md`: tick phases, ready structures, rules, costs and limits.
+- `docs/design.md`: the whole system on one page.
+- `dashboard/`: the viewer, its sample fixtures and its checks.
+- `scenarios/`: plain-language presets with independent expected results.
+- `demo/`: demonstration steps and screenshots.
 - `runs/`: real engine runs (`evidenceType: engine_run`) for the demonstration.
 
 The PDF completion plan is local reference material and is ignored by Git.
