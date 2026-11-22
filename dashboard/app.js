@@ -178,11 +178,104 @@ function parseRun(text) {
   return { data, errors: validateRun(data) };
 }
 
-if (typeof module !== "undefined") module.exports = { validateRun, parseRun };
+// ---- Selected-tick view: plain lookups in the recorded run ----
+// A tick without a snapshot shows nothing; it is never filled from a neighbour or the final state.
+const snapshotAt = (run, tick) => run.snapshots.find((s) => s.tick === tick) ?? null;
+const taskOf = (run, taskId) => run.tasks.find((t) => t.taskId === taskId);
+
+function jobLabel(run, jobId) {
+  const job = run.jobs.find((j) => j.jobId === jobId);
+  return `${taskOf(run, job.taskId).name} · job ${jobId}`;
+}
+
+function resourceLabel(run, resourceId) {
+  const first = run.snapshots[0];
+  if (first?.mutexes.some((m) => m.resourceId === resourceId)) return `mutex ${resourceId}`;
+  if (first?.semaphores.some((m) => m.resourceId === resourceId)) return `semaphore ${resourceId}`;
+  return `resource ${resourceId}`;
+}
+
+const jobRowsAt = (run, tick) => snapshotAt(run, tick)?.jobs ?? [];
+const readyAt = (run, tick) => (snapshotAt(run, tick)?.readyOrder ?? []).map((id) => jobLabel(run, id));
+const sleepersAt = (run, tick) => jobRowsAt(run, tick).filter((r) => r.wakeTick !== null).map((r) => [jobLabel(run, r.jobId), r.wakeTick]);
+
+function resourcesAt(run, tick) {
+  const snap = snapshotAt(run, tick);
+  if (!snap) return [];
+  const waiters = (r) => r.waiters.map((id) => jobLabel(run, id)).join(", then ") || "none";
+  return [
+    ...snap.mutexes.map((m) => [`mutex ${m.resourceId}`, m.ownerJobId === null ? "free" : `owner ${jobLabel(run, m.ownerJobId)}`, waiters(m)]),
+    ...snap.semaphores.map((m) => [`semaphore ${m.resourceId}`, `count ${m.count} of ${m.maxCount}`, waiters(m)]),
+  ];
+}
+
+function waitText(run, row, tick) {
+  if (row.blockReason === "none") return "nothing";
+  if (row.blockReason === "timer") return `timer, wakes at tick ${row.wakeTick}`;
+  if (row.blockReason === "semaphore") return `semaphore ${row.blockedResourceId}`;
+  const owner = snapshotAt(run, tick).mutexes.find((m) => m.resourceId === row.blockedResourceId)?.ownerJobId ?? null;
+  return `mutex ${row.blockedResourceId}, ${owner === null ? "not owned" : `owned by ${jobLabel(run, owner)}`}`;
+}
+
+// scriptIndex is the next step to take; a RUN that is under way has already been passed.
+function nextStep(run, row) {
+  if (row.state === "COMPLETED") return "finished";
+  return String(taskOf(run, row.taskId).script ?? "").split("; ")[row.scriptIndex] || "not given";
+}
+
+function burstText(run, row) {
+  return row.cpuBurstRemaining === 0 && nextStep(run, row).startsWith("RUN") ? "not started" : row.cpuBurstRemaining;
+}
+
+const priorityText = (row) => row.effectivePriority === row.basePriority ? String(row.basePriority)
+  : `${row.effectivePriority} (base ${row.basePriority})`;
+
+// [label, value] pairs describing one job at one tick.
+function inspectJob(run, jobId, tick) {
+  const job = run.jobs.find((j) => j.jobId === jobId);
+  const fixed = [["Job", jobLabel(run, jobId)], ["Released at", job.releaseTick], ["Deadline", job.absoluteDeadline], ["Script", taskOf(run, job.taskId).script]];
+  const state = (text) => [...fixed, ["State", text]];
+  if (!snapshotAt(run, tick)) return state(`no snapshot recorded at tick ${tick}`);
+  const row = jobRowsAt(run, tick).find((r) => r.jobId === jobId);
+  if (!row) return state(tick < job.releaseTick ? `not released yet (releases at ${job.releaseTick})` : "not in this snapshot");
+  return [...state(row.state),
+    ["Base priority", row.basePriority], ["Effective priority", row.effectivePriority],
+    ["Waiting for", waitText(run, row, tick)], ["Holds", row.heldMutexId === null ? "nothing" : `mutex ${row.heldMutexId}`],
+    ["CPU left in this RUN", burstText(run, row)], ["CPU used so far", row.totalCpuUsed],
+    ["Next step", nextStep(run, row)], ["Deadline missed", row.deadlineMissed ? "yes" : "no, not by this tick"]];
+}
+
+// All events at the tick plus a little context on both sides.
+function eventsNear(run, tick) {
+  const count = (test) => run.events.filter(test).length; // Events are sorted by tick.
+  return run.events.slice(Math.max(0, count((e) => e.tick < tick) - 10), count((e) => e.tick <= tick) + 8);
+}
+
+function describeEvent(run, e) {
+  const data = { ...e.data };
+  const parts = [];
+  if (e.type === "PRIORITY_CHANGE") {
+    parts.push(`effective priority ${data.from} → ${data.to}`);
+    delete data.from;
+    delete data.to;
+  }
+  parts.push(e.reason.replaceAll("_", " "));
+  if (e.resourceId !== null) parts.push(resourceLabel(run, e.resourceId));
+  for (const [key, value] of Object.entries(data)) {
+    const job = key.endsWith("JobId") && run.jobs.some((j) => j.jobId === value);
+    parts.push(job ? `${key.slice(0, -5)} ${jobLabel(run, value)}` : `${key} ${value ?? "none"}`);
+  }
+  return (e.jobId === null ? "" : `${jobLabel(run, e.jobId)}: `) + parts.join(", ");
+}
+
+if (typeof module !== "undefined")
+  module.exports = { validateRun, parseRun, snapshotAt, inspectJob, jobRowsAt, resourcesAt, sleepersAt, readyAt, eventsNear, describeEvent };
 
 if (typeof document !== "undefined") {
   const $ = (id) => document.getElementById(id);
   const runs = []; // { name, data }
+  // View state only; imported runs are never modified.
+  let current = null, tick = 0, selectedJob = null, timer = null, moveCursor = null;
 
   const el = (tag, text, cls) => {
     const e = document.createElement(tag);
@@ -201,21 +294,23 @@ if (typeof document !== "undefined") {
     }
   }
 
-  function fillTable(table, headers, rows) {
+  // `decorate(tr, rowIndex)` can mark a row or make it selectable.
+  function fillTable(table, headers, rows, decorate) {
     table.replaceChildren();
     const head = el("tr");
     headers.forEach((h) => head.append(el("th", h)));
     table.append(el("thead"));
     table.tHead.append(head);
     const body = el("tbody");
-    for (const row of rows) {
+    rows.forEach((row, i) => {
       const tr = el("tr");
+      decorate?.(tr, i);
       for (const cell of row) {
         const missing = cell === null || cell === undefined;
         tr.append(el("td", missing ? cell === null ? "n/a" : "—" : cell, missing ? "na" : undefined));
       }
       body.append(tr);
-    }
+    });
     table.append(body);
   }
 
@@ -236,8 +331,8 @@ if (typeof document !== "undefined") {
     svg.replaceChildren();
     const horizon = run.config.horizonTicks;
     const taskIndex = new Map(run.tasks.map((t, i) => [t.taskId, i]));
-    const taskName = new Map(run.tasks.map((t) => [t.taskId, t.name]));
-    const lanes = run.jobs.map((j) => ({ key: j.jobId, label: `${taskName.get(j.taskId)} · job ${j.jobId}`, job: j }));
+    const jobs = new Map(run.jobs.map((j) => [j.jobId, j]));
+    const lanes = run.jobs.map((j) => ({ key: j.jobId, label: jobLabel(run, j.jobId), job: j }));
     lanes.push({ key: "idle", label: "idle", job: null });
 
     const labelW = 120, laneH = 26, top = 4, axisH = 22;
@@ -258,7 +353,7 @@ if (typeof document !== "undefined") {
 
     for (const s of run.segments) {
       const key = s.jobId === null ? "idle" : s.jobId;
-      const job = s.jobId === null ? null : run.jobs.find((j) => j.jobId === s.jobId);
+      const job = s.jobId === null ? null : jobs.get(s.jobId);
       const y = laneY.get(key) + 4;
       const rect = svgEl("rect", { x: x(s.start), y, width: (s.end - s.start) * px - 1, height: laneH - 8, rx: 2 });
       if (job) rect.setAttribute("fill", taskColor(taskIndex.get(job.taskId), run.tasks.length));
@@ -282,10 +377,113 @@ if (typeof document !== "undefined") {
     const axisY = top + lanes.length * laneH;
     const step = Math.max(1, Math.ceil(30 / px));
     for (let t = 0; t <= horizon; t += step) svg.append(svgEl("text", { x: x(t) - 3, y: axisY + 15 }, t));
+
+    const cursor = svgEl("line", { y1: 0, y2: axisY + 4, class: "cursor" });
+    svg.append(cursor);
+    const box = svg.parentElement;
+    moveCursor = (t) => {
+      cursor.setAttribute("x1", x(t));
+      cursor.setAttribute("x2", x(t));
+      if (x(t) < box.scrollLeft + labelW || x(t) > box.scrollLeft + box.clientWidth - 20) box.scrollLeft = x(t) - labelW - 20;
+    };
   }
 
+  // Redraws everything that depends on the selected tick or job.
+  function renderTick() {
+    const run = current, horizon = run.config.horizonTicks;
+    moveCursor(tick);
+    $("slider").value = tick;
+    $("tickLabel").textContent = `tick ${tick} of ${horizon}`;
+    for (const e of document.querySelectorAll(".tickNow")) e.textContent = `at tick ${tick}`;
+    $("prev").disabled = $("reset").disabled = tick === 0;
+    $("next").disabled = tick === horizon;
+
+    const snap = snapshotAt(run, tick);
+    $("noSnapshot").hidden = snap !== null;
+    const rows = jobRowsAt(run, tick);
+    fillTable($("states"), ["Job", "State", "Effective priority", "Waiting for", "Holds", "CPU left in RUN", "CPU used", "Missed"],
+      rows.map((r) => [jobLabel(run, r.jobId), r.state, priorityText(r), waitText(run, r, tick),
+        r.heldMutexId === null ? "nothing" : `mutex ${r.heldMutexId}`, burstText(run, r), r.totalCpuUsed, r.deadlineMissed ? "yes" : "no"]),
+      (tr, i) => {
+        tr.className = `pick${rows[i].jobId === selectedJob ? " selected" : ""}`;
+        tr.addEventListener("click", () => selectJob(rows[i].jobId));
+      });
+
+    fillMeta($("inspector"), selectedJob === null ? [] : inspectJob(run, selectedJob, tick));
+    fillTable($("resources"), ["Resource", "Owner / permits", "Waiters in order"], resourcesAt(run, tick));
+    fillMeta($("queues"), [
+      ["Running", !snap ? "unknown" : snap.runningJobId === null ? "idle" : jobLabel(run, snap.runningJobId)],
+      ["Ready, most urgent first", !snap ? "unknown" : readyAt(run, tick).join(", ") || "none"],
+      ["Sleeping", !snap ? "unknown" : sleepersAt(run, tick).map(([job, wake]) => `${job} until ${wake}`).join(", ") || "none"],
+    ]);
+
+    $("events").replaceChildren(...eventsNear(run, tick).map((e) => {
+      const b = eventButton(run, e);
+      if (e.tick === tick) b.classList.add("now");
+      return b;
+    }));
+  }
+
+  // One event as a button that jumps to its tick.
+  function eventButton(run, e) {
+    const b = el("button", undefined, "event");
+    b.type = "button";
+    b.append(el("span", `t=${e.tick}`, "when"), el("span", e.type, "type"), el("span", describeEvent(run, e)));
+    b.addEventListener("click", () => {
+      pause();
+      if (e.jobId !== null) selectedJob = $("jobSelect").value = e.jobId;
+      goTo(e.tick);
+    });
+    return b;
+  }
+
+  function selectJob(jobId) {
+    selectedJob = jobId;
+    $("jobSelect").value = jobId;
+    renderTick();
+  }
+
+  function goTo(t) {
+    tick = Math.max(0, Math.min(current.config.horizonTicks, t));
+    renderTick();
+  }
+
+  function pause() {
+    clearInterval(timer);
+    timer = null;
+    $("play").textContent = "Play";
+  }
+
+  // Replays the recorded ticks; nothing is simulated here.
+  function play() {
+    const horizon = current.config.horizonTicks;
+    if (tick >= horizon) goTo(0);
+    $("play").textContent = "Pause";
+    timer = setInterval(() => {
+      goTo(tick + 1);
+      if (tick >= horizon) pause();
+    }, Math.max(50, Math.min(600, 20000 / Math.max(horizon, 1)))); // Long runs use shorter steps.
+  }
+
+  $("play").addEventListener("click", () => (timer === null ? play() : pause()));
+  $("prev").addEventListener("click", () => { pause(); goTo(tick - 1); });
+  $("next").addEventListener("click", () => { pause(); goTo(tick + 1); });
+  $("reset").addEventListener("click", () => { pause(); goTo(0); });
+  $("slider").addEventListener("input", (e) => { pause(); goTo(Number(e.target.value)); });
+  $("jobSelect").addEventListener("change", (e) => selectJob(Number(e.target.value)));
+
   function render(run) {
+    pause();
+    current = run;
+    tick = 0;
+    selectedJob = run.jobs.length ? run.jobs[0].jobId : null;
     $("view").hidden = false;
+    $("slider").max = run.config.horizonTicks;
+    $("jobSelect").replaceChildren(...run.jobs.map((j) => {
+      const o = el("option", jobLabel(run, j.jobId));
+      o.value = j.jobId;
+      return o;
+    }));
     $("fixtureBanner").hidden = run.run.evidenceType !== "design_fixture";
     const c = run.config, r = run.run;
     fillMeta($("runMeta"), [
@@ -314,6 +512,7 @@ if (typeof document !== "undefined") {
     fillTable($("perTask"), ["Task", "Completed samples", "Response min", "mean", "max", "Jitter (max−min)", "Misses"],
       (m.perTask || []).map((p) => [taskName.get(p.taskId) ?? p.taskId, p.completedSamples, p.responseMin, p.responseMean, p.responseMax,
         p.jitter === null && p.completedSamples < 2 ? "insufficient samples" : p.jitter, p.misses]));
+    renderTick();
   }
 
   function refreshSelect(selectIndex) {

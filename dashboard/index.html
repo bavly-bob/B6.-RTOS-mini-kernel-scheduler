@@ -24,16 +24,52 @@
   <main id="view" hidden>
     <div id="fixtureBanner" class="fixture" hidden>SAMPLE DATA: design_fixture, hand-written for the dashboard and not produced by the engine.</div>
 
-    <section class="card">
-      <h2>Run</h2>
-      <dl id="runMeta" class="meta"></dl>
-    </section>
+    <div class="layout">
+      <section class="card">
+        <h2>Run</h2>
+        <dl id="runMeta" class="meta"></dl>
+      </section>
 
-    <section class="card">
-      <h2>Gantt chart</h2>
-      <div class="legend"><span class="sw idle"></span>idle <span class="sw dl"></span>deadline <span class="sw rel"></span>release</div>
-      <div class="scroll"><svg id="gantt" role="img" aria-label="CPU intervals per job"></svg></div>
-    </section>
+      <div>
+      <section class="card">
+        <h2>Gantt chart</h2>
+        <div class="legend"><span class="sw idle"></span>idle <span class="sw dl"></span>deadline <span class="sw rel"></span>release <span class="sw cur"></span>selected tick</div>
+        <div class="scroll"><svg id="gantt" role="img" aria-label="CPU intervals per job"></svg></div>
+        <div class="controls">
+          <button type="button" id="reset">Reset</button>
+          <button type="button" id="prev">Previous</button>
+          <button type="button" id="play">Play</button>
+          <button type="button" id="next">Next</button>
+          <input type="range" id="slider" min="0" max="0" value="0" step="1" aria-label="Selected tick">
+          <output id="tickLabel"></output>
+        </div>
+        <p id="noSnapshot" class="fixture" hidden>This run file has no snapshot at the selected tick, so no job or resource state is shown.</p>
+        <dl id="queues" class="meta"></dl>
+      </section>
+
+      <section class="card">
+        <h2>Job states <small class="tickNow"></small></h2>
+        <div class="scroll"><table id="states"></table></div>
+      </section>
+      </div>
+
+      <section class="card">
+        <h2>Inspector <small class="tickNow"></small></h2>
+        <label>Job <select id="jobSelect"></select></label>
+        <dl id="inspector" class="meta narrow"></dl>
+      </section>
+    </div>
+
+    <div class="two">
+      <section class="card">
+        <h2>Resources <small class="tickNow"></small></h2>
+        <div class="scroll"><table id="resources"></table></div>
+      </section>
+      <section class="card">
+        <h2>Events near the selected tick <small>(select one to jump to it)</small></h2>
+        <div id="events" class="events"></div>
+      </section>
+    </div>
 
     <section class="card">
       <h2>Tasks</h2>
@@ -41,7 +77,7 @@
     </section>
 
     <section class="card">
-      <h2>Jobs</h2>
+      <h2>Final outcomes <small>(whole run, at the horizon)</small></h2>
       <div class="scroll"><table id="jobs"></table></div>
     </section>
 

@@ -7,7 +7,17 @@ for working before the engine exports real runs.
 
 The page only displays what the file contains. It does not run or re-schedule anything.
 
-Self-check: `node dashboard/validate.test.js`
+Self-checks: `node dashboard/validate.test.js` (import) and `node dashboard/view.test.js` (selected tick).
+
+## Using it
+
+- **Reset, Previous, Play/Pause, Next** and the slider only change the selected tick of the recording.
+- Choose a job in the **Inspector** or select a row in **Job states**.
+- Select an event to jump to its tick and job.
+- The view at tick `t` is the snapshot recorded at `t`: decisions at `t` have been made, `[t, t+1)` has not run.
+  If a file has no snapshot at that tick the page says so; it never borrows another tick's state.
+- **Final outcomes** is the only table that shows the end of the run instead of the selected tick.
+- "CPU left in this RUN" is the rest of the current RUN step. "not started" means the step has not been loaded yet.
 
 ## Fields the dashboard currently reads (schemaVersion 1)
 
@@ -25,7 +35,8 @@ Unknown times are JSON `null`, never 0 or the horizon.
 | `metrics.overall` (any key/value pairs) | shown as-is |
 | `metrics.perTask[].{taskId, completedSamples, responseMin, responseMean, responseMax, jitter, misses}` | per-task table; `jitter: null` with < 2 samples shows "insufficient samples" |
 | `validation.{status, traceTruncated}` | metadata |
-| `events`, `snapshots` | must be arrays; displayed from 18 Nov (slider, inspector) |
+| `snapshots[]` | slider, inspector, job states, resources, ready order and sleepers; looked up by exact `tick` |
+| `events[]` | event list; `type`, `reason`, `resourceId` and `data` are shown as text |
 
 ## Import checks
 
