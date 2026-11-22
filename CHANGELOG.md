@@ -201,3 +201,45 @@ Page numbers refer to the completion plan.
   caught by the three checks.
 - A generated 30 MiB file at the kernel limits (512 jobs, 100,000 snapshot rows,
   50,000 events) was parsed and validated in 0.14 s in Node.
+
+## Phase 5: Scenario descriptions, design document, README and demonstration
+
+**What changed**
+- `scenarios/`: an index, five missing preset descriptions (`rr_preemption`,
+  `sleep_order`, `suspend_resume`, `rm_edf_compare`, `overload`) and
+  `validation_cases.md`. The two existing files are unchanged.
+- `docs/design.md`: architecture, data-structure use and costs, tick and state rules,
+  policies, synchronization, ownership, trade-offs, evidence and unfinished items.
+- `demo/README.md`: demonstration order, files to import, what to click, closing
+  narration and limits to state openly.
+- `README.md`: overview with links, status table, dashboard steps, restrictions. The
+  byte-order mark at the start of the file was removed.
+
+**Why it changed**
+- Plan p.23 (21 Nov task): assemble the design document, README, demonstration steps
+  and a clean demonstration folder, and lead product narration. Plan p.27 lists the
+  package contents. The old README said priority inheritance was not implemented,
+  which stopped being true at resource level with commit cbebeac.
+
+**How it works**
+- `design.md` summarizes and links the component guides rather than repeating them;
+  no other member's guide was edited.
+- Expected results come from the plan or were traced by hand from the stated rules,
+  then compared with `b6_sim`. Anything that does not work yet is listed as such,
+  with the owner given in the plan.
+
+**Files affected**
+- Created: `docs/design.md`, `demo/README.md`, `scenarios/README.md` and six files in
+  `scenarios/`.
+- Modified: `README.md`, `CHANGELOG.md`.
+
+**Verification**
+- Every scenario table was compared with `b6_sim` output: CPU intervals, completions and
+  misses match. All nine rejected command lines in `validation_cases.md` returned exit
+  code 2 with the quoted text.
+- Every relative link in the new and changed Markdown files resolves.
+- Fresh Debug build and `ctest`: 9 of 11 pass, the same two failures as the baseline.
+- The three dashboard checks passed.
+- `test_scheduler` stops at its first failure. In a scratch copy with only the stale
+  `testInheritanceOnIsRefusedUntilImplemented` call disabled, all 11 tests pass, so the
+  other scheduler tests and the dashboard check of its runs are not broken.
