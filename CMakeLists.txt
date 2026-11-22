@@ -139,3 +139,9 @@ if(NODE_EXECUTABLE)
                      ${CMAKE_CURRENT_BINARY_DIR}/scheduler_runs)
     set_tests_properties(scheduler_runs_dashboard_validation PROPERTIES DEPENDS scheduler)
 endif()
+
+# Timer equivalence end to end (Sarofem): every preset and seeded sleep-heavy
+# stress scenarios must export identical runs on the sorted-list and heap backends.
+add_executable(test_timer_equivalence tests/test_timer_equivalence.cpp)
+target_link_libraries(test_timer_equivalence PRIVATE b6_app)
+add_test(NAME timer_equivalence COMMAND test_timer_equivalence)
