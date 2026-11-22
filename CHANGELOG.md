@@ -57,7 +57,7 @@ Page numbers refer to the completion plan.
 
 **Files affected**
 - `dashboard/app.js`: validator, `parseRun`, import handler uses `parseRun`.
-- `dashboard/validate.test.js`: about 100 rejection cases; also loads every
+- `dashboard/validate.test.js`: about 90 rejection cases; also loads every
   fixture and every file in `runs/`.
 - `dashboard/README.md`: list of import checks.
 - `CHANGELOG.md`: created.
