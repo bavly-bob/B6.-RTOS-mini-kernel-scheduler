@@ -376,8 +376,9 @@ if (typeof document !== "undefined") {
     lanes.push({ key: "idle", label: "idle", job: null });
 
     const labelW = 120, laneH = 26, top = 4, axisH = 22;
-    const px = Math.max(8, Math.min(48, Math.floor(800 / Math.max(horizon, 1))));
-    const width = labelW + horizon * px + 10;
+    const box = svg.parentElement;
+    const px = Math.max(4, Math.min(48, (box.clientWidth - labelW - 20) / Math.max(horizon, 1))); // Fits the card, or scrolls.
+    const width = labelW + horizon * px + 20;
     const height = top + lanes.length * laneH + axisH;
     svg.setAttribute("width", width);
     svg.setAttribute("height", height);
@@ -385,9 +386,11 @@ if (typeof document !== "undefined") {
     const x = (t) => labelW + t * px;
     const laneY = new Map(lanes.map((l, i) => [l.key, top + i * laneH]));
 
+    const labels = svgEl("g", { class: "labels" });
+    labels.append(svgEl("rect", { x: 0, y: 0, width: labelW - 2, height, class: "labelBack" }));
     lanes.forEach((l) => {
       const y = laneY.get(l.key);
-      svg.append(svgEl("text", { x: 4, y: y + laneH / 2 + 4 }, l.label));
+      labels.append(svgEl("text", { x: 4, y: y + laneH / 2 + 4 }, l.label.length > 18 ? `${l.label.slice(0, 8)}…${l.label.slice(-9)}` : l.label));
       svg.append(svgEl("line", { x1: labelW, x2: x(horizon), y1: y + laneH, y2: y + laneH, class: "axis" }));
     });
 
@@ -424,12 +427,14 @@ if (typeof document !== "undefined") {
     }
 
     const axisY = top + lanes.length * laneH;
-    const step = Math.max(1, Math.ceil(30 / px));
+    const step = [1, 2, 5, 10, 20, 50].find((n) => n * px >= 30) ?? 100;
     for (let t = 0; t <= horizon; t += step) svg.append(svgEl("text", { x: x(t) - 3, y: axisY + 15 }, t));
 
     const cursor = svgEl("line", { y1: 0, y2: axisY + 4, class: "cursor" });
-    svg.append(cursor);
-    const box = svg.parentElement;
+    svg.append(cursor, labels);
+    const pinLabels = () => labels.setAttribute("transform", `translate(${box.scrollLeft})`);
+    box.onscroll = pinLabels;
+    pinLabels();
     moveCursor = (t) => {
       cursor.setAttribute("x1", x(t));
       cursor.setAttribute("x2", x(t));
@@ -459,7 +464,8 @@ if (typeof document !== "undefined") {
       });
 
     fillMeta($("inspector"), selectedJob === null ? [] : inspectJob(run, selectedJob, tick));
-    fillTable($("resources"), ["Resource", "Owner / permits", "Waiters in order"], resourcesAt(run, tick));
+    const resources = resourcesAt(run, tick);
+    fillTable($("resources"), ["Resource", "Owner / permits", "Waiters in order"], resources.length ? resources : [[snap ? "none in this run" : "unknown", "", ""]]);
     fillMeta($("queues"), [
       ["Running", !snap ? "unknown" : snap.runningJobId === null ? "idle" : jobLabel(run, snap.runningJobId)],
       ["Ready, most urgent first", !snap ? "unknown" : readyAt(run, tick).join(", ") || "none"],
@@ -471,6 +477,8 @@ if (typeof document !== "undefined") {
       if (e.tick === tick) b.classList.add("now");
       return b;
     }));
+    const now = $("events").querySelector(".now"); // Keep this tick's events visible without moving the page.
+    $("events").scrollTop = now ? now.offsetTop - $("events").offsetTop - 60 : 0;
   }
 
   // One event as a button that jumps to its tick.

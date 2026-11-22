@@ -11,7 +11,13 @@ Hand-written sample data, always shown with a SAMPLE DATA banner:
 
 The page only displays what the file contains. It does not run or re-schedule anything.
 
-Self-checks: `node dashboard/validate.test.js` (import) and `node dashboard/view.test.js` (selected tick).
+Self-checks (Node.js only, nothing to install):
+
+- `node dashboard/validate.test.js`: import checks.
+- `node dashboard/view.test.js`: selected-tick accuracy on every file in `runs/`.
+- `node dashboard/browser.check.js`: opens the page from disk in headless Chrome/Edge with the network
+  off and uses it (Node 22+; set `BROWSER` if the browser is not found). Add a directory to save screenshots:
+  `node dashboard/browser.check.js demo/screenshots`.
 
 ## Using it
 
