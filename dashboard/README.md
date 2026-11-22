@@ -2,12 +2,36 @@
 
 Open `dashboard/index.html` directly in a browser (no server, no network, no install).
 Click **Import run(s)** and pick one or more exported run files. Pick a run from the drop-down.
-`fixtures/rr_preemption.design.json` is hand-written golden trace A, labelled `design_fixture`,
-for working before the engine exports real runs.
+
+Hand-written sample data, always shown with a SAMPLE DATA banner:
+
+- `fixtures/rr_preemption.design.json`: golden trace A, without snapshots.
+- `fixtures/inversion_on.design.json`: golden trace B with inheritance ON. It stands in until the engine can
+  export that run; replace it in the demonstration with the real file as soon as one exists.
 
 The page only displays what the file contains. It does not run or re-schedule anything.
 
-Self-check: `node dashboard/validate.test.js`
+Self-checks (Node.js only, nothing to install):
+
+- `node dashboard/validate.test.js`: import checks.
+- `node dashboard/view.test.js`: selected-tick accuracy on every file in `runs/`.
+- `node dashboard/browser.check.js`: opens the page from disk in headless Chrome/Edge with the network
+  off and uses it (Node 22+; set `BROWSER` if the browser is not found). Add a directory to save screenshots:
+  `node dashboard/browser.check.js demo/screenshots`.
+
+## Using it
+
+- **Reset, Previous, Play/Pause, Next** and the slider only change the selected tick of the recording.
+- Choose a job in the **Inspector** or select a row in **Job states**.
+- Select an event to jump to its tick and job.
+- The view at tick `t` is the snapshot recorded at `t`: decisions at `t` have been made, `[t, t+1)` has not run.
+  If a file has no snapshot at that tick the page says so; it never borrows another tick's state.
+- A boosted job is outlined in the Gantt chart with its effective priority; a missed deadline is marked ✕.
+- **Key events** lists every priority change, deadline miss and error of the run.
+- Switching to another run of the same scenario (OFF/ON, RM/EDF) keeps the selected tick and job.
+- Metrics come from the file only. If the engine exported none, the page says so and shows none.
+- **Final outcomes** is the only table that shows the end of the run instead of the selected tick.
+- "CPU left in this RUN" is the rest of the current RUN step. "not started" means the step has not been loaded yet.
 
 ## Fields the dashboard currently reads (schemaVersion 1)
 
@@ -22,11 +46,24 @@ Unknown times are JSON `null`, never 0 or the horizon.
 | `tasks[].{taskId, name, basePriority, firstRelease, periodTicks, relativeDeadline, script}` | task table, lane names; `script` is a display string |
 | `jobs[].{jobId, taskId, releaseTick, absoluteDeadline, firstStartTick, completionTick, totalCpuUsed, finalState, deadlineMissed, deadlineMissTick}` | one Gantt lane per job, release/deadline markers, job table |
 | `segments[].{start, end, jobId, basePriority, effectivePriority}` | CPU bars; `jobId: null` is idle; sorted, non-overlapping, `0 <= start < end <= horizon` |
-| `metrics.overall` (any key/value pairs) | shown as-is |
+| `metrics.overall` | shown with units; missing values are "not given" or "not applicable" |
 | `metrics.perTask[].{taskId, completedSamples, responseMin, responseMean, responseMax, jitter, misses}` | per-task table; `jitter: null` with < 2 samples shows "insufficient samples" |
-| `validation.{status, traceTruncated}` | metadata |
-| `events`, `snapshots` | must be arrays; displayed from 18 Nov (slider, inspector) |
+| `validation.{status, error, warnings, limitsHit, traceTruncated}` | notes above the run; an invalid run gets a red banner |
+| `snapshots[]` | slider, inspector, job states, resources, ready order and sleepers; looked up by exact `tick` |
+| `events[]` | event list; `type`, `reason`, `resourceId` and `data` are shown as text |
 
-Rejected on import: bad JSON, files > 32 MiB, wrong schema version, missing objects/arrays,
-duplicate task/job IDs, jobs referring to unknown tasks, segments referring to unknown jobs,
-malformed/overlapping/out-of-horizon segments, non-integer ticks.
+## Import checks
+
+A file is rejected, with the failing field named, for:
+
+- text that is not JSON, files over 32 MiB, or a `schemaVersion` other than 1;
+- missing objects or arrays, or rows that are not objects;
+- unknown policy, timer backend, state, block reason or event type;
+- `edf` or `rate_monotonic` combined with inheritance, mutexes or semaphores;
+- duplicate task, job or resource IDs, or references to unknown ones;
+- intervals that are negative, empty, overlapping, out of order or past the horizon;
+- events out of `(tick, phase, seq)` order, or snapshot ticks that do not increase;
+- more than one RUNNING job, or a `runningJobId` that disagrees with the rows;
+- semaphore counts outside `0..maxCount`, or a horizon above 2,000 ticks.
+
+A run whose own `validation.status` is `invalid` is still accepted for inspection.

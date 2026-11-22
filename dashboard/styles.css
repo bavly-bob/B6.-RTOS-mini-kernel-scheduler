@@ -21,7 +21,7 @@ body { margin: 0; padding: 0 16px 32px; background: var(--bg); color: var(--text
   font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
 .bar { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; padding: 14px 0; border-bottom: 1px solid var(--line); }
 .bar h1 { font-size: 18px; margin: 0 auto 0 0; }
-.button { background: var(--accent); color: #fff; padding: 6px 12px; border-radius: 6px; cursor: pointer; }
+.button { background: var(--accent); color: var(--bg); padding: 6px 12px; border-radius: 6px; cursor: pointer; }
 .button:focus-within { outline: 2px solid var(--text); }
 select { padding: 6px; max-width: 100%; background: var(--card); color: var(--text); border: 1px solid var(--line); border-radius: 6px; }
 .note { color: var(--muted); font-size: 13px; }
@@ -49,3 +49,30 @@ td.na { color: var(--muted); font-style: italic; }
 #gantt .idle { fill: var(--idle); }
 #gantt .deadline { stroke: var(--deadline); stroke-width: 2; }
 #gantt .release { stroke: var(--text); stroke-width: 2; }
+.sw.cur { background: var(--accent); width: 3px; }
+#gantt .cursor { stroke: var(--accent); stroke-width: 2; pointer-events: none; }
+.layout { display: grid; gap: 0 12px; grid-template-columns: 200px minmax(0, 1fr) 260px; align-items: start; }
+.two { display: grid; gap: 0 12px; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: start; }
+@media (max-width: 1000px) { .layout, .two { grid-template-columns: minmax(0, 1fr); } }
+.meta.narrow { grid-template-columns: 1fr; margin-top: 8px; }
+.controls { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 8px 0; }
+.controls button { padding: 5px 10px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); color: var(--text); font: inherit; cursor: pointer; }
+.controls button:disabled { opacity: .5; cursor: default; }
+.controls input { flex: 1 1 160px; accent-color: var(--accent); }
+tr.pick { cursor: pointer; }
+tr.selected td { background: var(--bg); font-weight: 600; }
+.events { max-height: 320px; overflow-y: auto; }
+.event { display: flex; gap: 8px; width: 100%; padding: 4px 6px; border: 0; border-left: 3px solid transparent; background: none; color: var(--text); font: inherit; text-align: left; cursor: pointer; }
+.event:hover { background: var(--bg); }
+.event.now { border-left-color: var(--accent); background: var(--bg); }
+.event .when { color: var(--muted); flex: 0 0 48px; }
+.event .type { flex: 0 0 130px; font-weight: 600; }
+.sw.bst { border: 2px solid var(--text); }
+.missKey { color: var(--deadline); font-weight: 700; margin: 0 4px 0 10px; }
+#gantt .boosted { stroke: var(--text); stroke-width: 2; }
+#gantt text.boost { fill: #fff; font-weight: 700; paint-order: stroke; stroke: #000; stroke-width: 2px; }
+#gantt text.miss { fill: var(--deadline); font-weight: 700; font-size: 13px; }
+.notes { background: var(--warn-bg); color: var(--warn); padding: 10px 14px; border-radius: 6px; margin: 12px 0; white-space: pre-wrap; }
+.notes.invalid { background: var(--err-bg); color: var(--err); font-weight: 600; }
+.events + h2 { margin-top: 12px; }
+#gantt .labelBack { fill: var(--card); }
