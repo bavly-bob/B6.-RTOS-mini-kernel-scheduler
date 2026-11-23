@@ -3,9 +3,9 @@
   "run":{
     "runId":"rm_edf_compare-fixed_priority-sorted_list",
     "scenarioId":"rm_edf_compare",
-    "label":"Periodic A and B under EDF or fixed priority",
+    "label":"Periodic A and B under RM or EDF",
     "evidenceType":"engine_run",
-    "engineRevision":"b2b0837",
+    "engineRevision":"b5dfd58",
     "createdAt":null
   },
   "config":{
@@ -62,13 +62,13 @@
     {"tick":8,"runningJobId":null,"readyOrder":[4],"jobs":[{"jobId":1,"taskId":0,"state":"COMPLETED","suspended":false,"basePriority":2,"effectivePriority":2,"cpuBurstRemaining":0,"totalCpuUsed":2,"scriptIndex":1,"blockReason":"none","blockedResourceId":null,"heldMutexId":null,"wakeTick":null,"deadlineMissed":false},{"jobId":2,"taskId":1,"state":"COMPLETED","suspended":false,"basePriority":1,"effectivePriority":1,"cpuBurstRemaining":0,"totalCpuUsed":4,"scriptIndex":1,"blockReason":"none","blockedResourceId":null,"heldMutexId":null,"wakeTick":null,"deadlineMissed":true},{"jobId":3,"taskId":0,"state":"COMPLETED","suspended":false,"basePriority":2,"effectivePriority":2,"cpuBurstRemaining":0,"totalCpuUsed":2,"scriptIndex":1,"blockReason":"none","blockedResourceId":null,"heldMutexId":null,"wakeTick":null,"deadlineMissed":false},{"jobId":4,"taskId":1,"state":"READY","suspended":false,"basePriority":1,"effectivePriority":1,"cpuBurstRemaining":0,"totalCpuUsed":0,"scriptIndex":0,"blockReason":"none","blockedResourceId":null,"heldMutexId":null,"wakeTick":null,"deadlineMissed":false}],"mutexes":[],"semaphores":[]}
   ],
   "metrics":{
-    "overall":{},
-    "perTask":[]
+    "overall":{"busyTicks":8,"observedTicks":8,"busyPercent":100,"completedJobs":3,"unfinishedJobs":1,"deadlineMisses":1,"demandUtilization":0.9714285714,"rmBound":null,"rmBoundApplicable":false,"rmBoundNote":"policy is fixed_priority, not rate_monotonic"},
+    "perTask":[{"taskId":0,"completedSamples":2,"responseMin":2,"responseMean":2,"responseMax":2,"jitter":0,"misses":0},{"taskId":1,"completedSamples":1,"responseMin":8,"responseMean":8,"responseMax":8,"jitter":null,"misses":1}]
   },
   "validation":{
     "status":"ok",
     "error":null,
-    "warnings":["metrics were not computed for this run"],
+    "warnings":[],
     "limitsHit":[],
     "traceTruncated":false
   }

@@ -5,7 +5,7 @@
     "scenarioId":"semaphore_signal",
     "label":"Consumer waits until the producer signals",
     "evidenceType":"engine_run",
-    "engineRevision":"b2b0837",
+    "engineRevision":"b5dfd58",
     "createdAt":null
   },
   "config":{
@@ -56,13 +56,13 @@
     {"tick":5,"runningJobId":null,"readyOrder":[],"jobs":[{"jobId":1,"taskId":0,"state":"COMPLETED","suspended":false,"basePriority":3,"effectivePriority":3,"cpuBurstRemaining":0,"totalCpuUsed":1,"scriptIndex":2,"blockReason":"none","blockedResourceId":null,"heldMutexId":null,"wakeTick":null,"deadlineMissed":false},{"jobId":2,"taskId":1,"state":"COMPLETED","suspended":false,"basePriority":1,"effectivePriority":1,"cpuBurstRemaining":0,"totalCpuUsed":3,"scriptIndex":3,"blockReason":"none","blockedResourceId":null,"heldMutexId":null,"wakeTick":null,"deadlineMissed":false}],"mutexes":[],"semaphores":[{"resourceId":0,"count":0,"maxCount":1,"waiters":[]}]}
   ],
   "metrics":{
-    "overall":{},
-    "perTask":[]
+    "overall":{"busyTicks":4,"observedTicks":5,"busyPercent":80,"completedJobs":2,"unfinishedJobs":0,"deadlineMisses":0,"demandUtilization":null,"rmBound":null,"rmBoundApplicable":false,"rmBoundNote":"one-shot tasks"},
+    "perTask":[{"taskId":0,"completedSamples":1,"responseMin":3,"responseMean":3,"responseMax":3,"jitter":null,"misses":0},{"taskId":1,"completedSamples":1,"responseMin":4,"responseMean":4,"responseMax":4,"jitter":null,"misses":0}]
   },
   "validation":{
     "status":"ok",
     "error":null,
-    "warnings":["metrics were not computed for this run"],
+    "warnings":[],
     "limitsHit":[],
     "traceTruncated":false
   }

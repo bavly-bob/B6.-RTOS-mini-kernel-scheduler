@@ -146,8 +146,23 @@ descending, then wait order (FIFO among equals).
 `rmBound` (null when not applicable), `rmBoundApplicable`, `rmBoundNote`.
 `perTask[]`: `taskId`, `completedSamples`, `responseMin`, `responseMean`,
 `responseMax`, `jitter` (max - min; null with fewer than two samples), `misses`.
-Definitions: plan p.26. If the engine did not compute metrics, `overall` is
-`{}`, `perTask` is `[]` and a warning says so.
+If the engine did not compute metrics, `overall` is `{}`, `perTask` is `[]` and a
+warning says so. An invalid run never has metrics.
+
+Definitions (computed by `app/src/metrics.cpp` from the finished run):
+
+| Field | Meaning |
+| --- | --- |
+| `busyTicks` / `observedTicks` / `busyPercent` | CPU ticks used by jobs, the horizon, and observed utilization `100 * busy / observed`. |
+| `completedJobs` / `unfinishedJobs` | Released jobs with / without a completion by the horizon. |
+| `deadlineMisses` | Jobs flagged missed, each once (a late completion is still a miss). |
+| `demandUtilization` | `sum(Ci/Ti)`, `Ci` = RUN ticks per job, as a fraction (0.9714 = 97.14%). Null unless every task is periodic. |
+| `rmBound` | `n(2^(1/n) - 1)` as a fraction; null when not applicable. |
+| `rmBoundApplicable` | True only for a `rate_monotonic` run of independent periodic tasks (no mutexes, semaphores or SLEEP) with deadline = period. |
+| `rmBoundNote` | The first reason it does not apply (`one-shot tasks`, `tasks share mutexes or semaphores`, `tasks sleep, so they are not independent`, `deadlines differ from periods`, `policy is edf, not rate_monotonic`), or what the demand means: within the bound (every deadline is met), above it up to 100% (inconclusive), above 100% (overload). |
+| `perTask[].completedSamples`, `responseMin/Mean/Max` | Completed jobs of the task and their `completionTick - releaseTick`, late ones included; null with no sample. |
+| `perTask[].jitter` | `responseMax - responseMin`; null with fewer than two samples. |
+| `perTask[].misses` | The task's jobs flagged missed. |
 
 ## `validation`
 

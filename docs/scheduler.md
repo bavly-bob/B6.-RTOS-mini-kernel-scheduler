@@ -133,7 +133,8 @@ with an `ERROR` event, never presented as a successful run.
 | `suspend_resume` | X[0,1) idle[1,3) X[3,6) idle[6,7) S[7,9); timer fires at 5 while suspended |
 | `semaphore_signal` | P[0,2) C[2,3) P[3,4); permit granted directly |
 | `rm_edf_compare` (EDF) | A0[0,2) B0[2,6) A1[6,8); B0 completes 6; B1 released 7, unfinished |
-| `rm_edf_compare` (fixed priority) | A0[0,2) B0[2,5) A1[5,7) B0[7,8); B0 completes 8, missed at 7 |
+| `rm_edf_compare` (RM) | A gets 31, B 30; A0[0,2) B0[2,5) A1[5,7) B0[7,8); B0 completes 8, missed at 7 |
+| `rm_edf_compare` (fixed priority) | Same CPU trace as RM: the preset's priorities follow period order |
 | `overload` | 9 jobs, misses recorded, CPU never idle |
 | deadline boundary (test only) | completion at the deadline is on time; unfinished at the deadline is flagged once and stays flagged after a late completion; a deadline after the horizon is not missed |
 
@@ -173,5 +174,3 @@ if a measured need appears (for example, ordered range queries over timers).
 | Missing | Owner | Effect today |
 | --- | --- | --- |
 | Priority inheritance (donation and restore) | Moataz | `--inheritance on` is refused with a clear message; the hook it needs exists. |
-| RM priority assignment | Marc | `--policy rate_monotonic` is refused; the scheduler already dispatches RM runs by priority. |
-| Metrics (response, jitter, utilization) | Marc | Runs export without metrics; the exporter adds a warning. |

@@ -38,9 +38,13 @@ public:
     const RunTrace& trace() const noexcept { return trace_; }
     const Scheduler& scheduler() const noexcept { return scheduler_; }
 
-    // Writes the run file (schemaVersion 1) as an engine_run. Metrics are not
-    // computed by the scheduler (Marc's component), so they are exported as
-    // absent and the exporter adds a warning. Returns "" on success.
+    // Metrics of a finished, valid run (metrics.h). An invalid run has none:
+    // its numbers would describe a trace that stopped early.
+    std::optional<RunMetrics> metrics() const;
+
+    // Writes the run file (schemaVersion 1) as an engine_run, with metrics()
+    // when there are any; otherwise the exporter writes {} and a warning.
+    // Returns "" on success.
     std::string exportTo(const std::string& path, const RunInfo& info) const;
     void exportTo(std::ostream& out, const RunInfo& info) const;
 

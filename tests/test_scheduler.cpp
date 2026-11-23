@@ -256,9 +256,9 @@ static void testSemaphoreSignal() {
     CHECK_EQ(sim->trace().resourceRows().at(last.firstResource).count, 0);
 }
 
-// Plan trace E under EDF, and the same releases under fixed priority (whose
-// base priorities follow period order, giving the RM-style outcome).
-static void testEdfAndFixedPriorityComparison() {
+// Plan trace E under EDF and RM, and under fixed priority (whose hand-set
+// base priorities follow period order, so it must match RM).
+static void testRmAndEdfComparison() {
     auto edf = runPreset("rm_edf_compare");
     // A0=1, B0=2 (t=0), A1=3 (t=5), B1=4 (t=7).
     CHECK_EQ(cpu(*edf), std::string("1[0,2) 2[2,6) 3[6,8)"));
@@ -267,8 +267,18 @@ static void testEdfAndFixedPriorityComparison() {
     CHECK_EQ(edf->registry().jobCount(), std::size_t(4));
     CHECK(!job(*edf, 4).completionTick && job(*edf, 4).releaseTick == 7);  // B1 visible, unfinished.
 
+    // RM: A (T=5) gets 31, B (T=7) gets 30; the preset's own priorities are ignored.
+    auto rm = runPreset("rm_edf_compare", Policy::RateMonotonic);
+    CHECK_EQ(rm->registry().findTask(0)->basePriority, 31);
+    CHECK_EQ(rm->registry().findTask(1)->basePriority, 30);
+    CHECK_EQ(cpu(*rm), std::string("1[0,2) 2[2,5) 3[5,7) 2[7,8)"));  // A1 preempts B0 at 5.
+    CHECK_EQ(*job(*rm, 2).completionTick, 8);
+    CHECK(job(*rm, 2).deadlineMissRecorded && *job(*rm, 2).deadlineMissTick == 7);
+    CHECK(!job(*rm, 4).completionTick && job(*rm, 4).releaseTick == 7);
+    CHECK_EQ(rm->registry().jobCount(), std::size_t(4));  // Same releases as EDF.
+
     auto fp = runPreset("rm_edf_compare", Policy::FixedPriority);
-    CHECK_EQ(cpu(*fp), std::string("1[0,2) 2[2,5) 3[5,7) 2[7,8)"));
+    CHECK_EQ(cpu(*fp), cpu(*rm));
     CHECK_EQ(*job(*fp, 2).completionTick, 8);
     CHECK(job(*fp, 2).deadlineMissRecorded && *job(*fp, 2).deadlineMissTick == 7);
     CHECK(!job(*fp, 4).completionTick);
@@ -276,7 +286,7 @@ static void testEdfAndFixedPriorityComparison() {
 
 // 135% demand: every release exists as its own job; misses are recorded.
 static void testOverload() {
-    for (Policy policy : {Policy::FixedPriority, Policy::EDF}) {
+    for (Policy policy : {Policy::FixedPriority, Policy::RateMonotonic, Policy::EDF}) {
         auto sim = runPreset("overload", policy);
         CHECK_EQ(sim->registry().jobCount(), std::size_t(9));  // A: 0,4,..,16; B: 0,5,10,15.
         std::size_t misses = 0;
@@ -382,8 +392,8 @@ static void testAllPresetsAndRepeatability() {
     std::size_t written = 0;
     for (std::size_t i = 0; i < presetCount(); ++i) {
         const std::string id = presetAt(i).id;
-        for (Policy policy : {Policy::FixedPriority, Policy::EDF}) {
-            // EDF is only defined for periodic, resource-free task sets (validator).
+        for (Policy policy : {Policy::FixedPriority, Policy::RateMonotonic, Policy::EDF}) {
+            // RM/EDF are only defined for periodic, resource-free task sets (validator).
             ScenarioInput& probe = presetInput(id);
             probe.scenario.config.policy = policy;
             if (!validateScenario(probe.scenario).empty()) continue;
@@ -400,7 +410,8 @@ static void testAllPresetsAndRepeatability() {
             }
         }
     }
-    CHECK(written == 2 * presetCount() + 2 * 2);  // FP everywhere; EDF for the 2 periodic presets.
+    // FP everywhere; RM and EDF for the 2 periodic presets.
+    CHECK(written == 2 * presetCount() + 2 * 2 * 2);
 }
 
 // ---- Requeue hook for inheritance ---------------------------------------------------
@@ -507,7 +518,7 @@ int main(int argc, char** argv) {
     testSleepOrderOnBothBackends();
     testSuspendResume();
     testSemaphoreSignal();
-    testEdfAndFixedPriorityComparison();
+    testRmAndEdfComparison();
     testOverload();
     testDeadlineBoundary();
     testAllPresetsAndRepeatability();

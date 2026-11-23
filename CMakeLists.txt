@@ -43,6 +43,7 @@ add_test(NAME dynamic_array COMMAND test_dynamic_array)
 add_library(kernel_foundation
     kernel/src/registry.cpp
     kernel/src/validation.cpp
+    kernel/src/rate_monotonic.cpp
 )
 target_include_directories(kernel_foundation PUBLIC kernel/include)
 target_link_libraries(kernel_foundation PUBLIC data_structures)
@@ -104,7 +105,7 @@ add_library(kernel_scheduler kernel/src/scheduler.cpp)
 target_link_libraries(kernel_scheduler PUBLIC kernel_resources kernel_timers kernel_trace)
 
 # Application layer: one-run Simulation wrapper and the named preset scenarios.
-add_library(b6_app app/src/simulation.cpp app/src/presets.cpp)
+add_library(b6_app app/src/simulation.cpp app/src/presets.cpp app/src/metrics.cpp)
 target_include_directories(b6_app PUBLIC app/include)
 target_link_libraries(b6_app PUBLIC kernel_scheduler run_export)
 
@@ -118,6 +119,18 @@ add_executable(test_scheduler tests/test_scheduler.cpp)
 target_link_libraries(test_scheduler PRIVATE b6_app)
 add_test(NAME scheduler
          COMMAND test_scheduler ${CMAKE_CURRENT_BINARY_DIR}/scheduler_runs)
+
+# Metrics: response, misses, jitter, utilization and RM bound applicability.
+add_executable(test_metrics tests/test_metrics.cpp)
+target_link_libraries(test_metrics PRIVATE b6_app)
+add_test(NAME metrics COMMAND test_metrics)
+
+# Result tables (docs/results.md): golden-trace comparison and timer costs.
+# Not CTests: b6_timer_cost timings vary by machine. Build Release to time.
+add_executable(b6_golden experiments/golden_compare.cpp)
+target_link_libraries(b6_golden PRIVATE b6_app)
+add_executable(b6_timer_cost experiments/timer_cost.cpp)
+target_link_libraries(b6_timer_cost PRIVATE kernel_timers)
 
 # Every real engine run must also pass the dashboard's own import validator.
 if(NODE_EXECUTABLE)

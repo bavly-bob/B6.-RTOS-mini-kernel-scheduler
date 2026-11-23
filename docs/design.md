@@ -75,7 +75,7 @@ making it runnable. Details: [shared-contracts.md](shared-contracts.md).
 | Policy | Chooses | Ties |
 | --- | --- | --- |
 | Fixed priority | Front of the highest non-empty ring (larger number is more urgent) | Round-robin with `quantumTicks` |
-| Rate monotonic | Same, with priorities assigned by period | Equal periods share a ring |
+| Rate monotonic | Same, with priorities assigned by period: shortest gets 31, each longer distinct period one less | Equal periods share a ring |
 | EDF | Smallest `(absoluteDeadline, releaseSequence, jobId)` | Total order, so never by address |
 
 The running job stays in its ring. A job preempted by a higher priority keeps the rest
@@ -145,8 +145,6 @@ Design choices on the dashboard side:
 | Item | Component owner (plan pp. 19-22) | Effect today |
 | --- | --- | --- |
 | `Scheduler::onPriorityChanged` | Youssef / Moataz | `--inheritance on` stops at tick 1 with an explicit invalid run, and the `scheduler` CTest fails. Resource-level inheritance is implemented and tested. |
-| RM priority assignment | Marc | `--policy rate_monotonic` is refused. |
-| Metrics calculation | Marc | Runs carry no metrics; the page says so. |
-| Timer cost experiment | Marc / Sarofem | No cost figures are claimed. |
+| Timer cost experiment review | Marc / Sarofem | Results in [results.md](results.md); Sarofem has not reviewed them yet. |
 
 This is a simulation for study. It makes no hardware timing or safety claim.

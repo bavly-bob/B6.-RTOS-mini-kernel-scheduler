@@ -75,5 +75,6 @@ so the dashboard shows an explicit invalid run instead of a partial "ok" one.
 
 - Connect these calls to the production scheduler loop and export the first
   real `engine_run` (needs Youssef Gohar's scheduler).
-- Marc fills `RunMetrics`; the exporter already serializes it.
+- Done: `computeMetrics` (`app/src/metrics.cpp`) fills `RunMetrics`, and
+  `Simulation::exportTo` passes it for every valid run.
 - Timer-cost experiment with Marc: 10, 100, 500 pending timers on both backends.
