@@ -67,14 +67,22 @@ std::string jobLabel(const Registry& registry, JobId id) {
     return task->name + std::to_string(ordinal);
 }
 
+// Golden traces state who owns the CPU, not at which priority. The engine
+// starts a new segment when a job's priority changes (run-schema-v1, so the
+// Gantt chart shows inheritance), so adjacent segments of the same job (or
+// of idle) are joined here: L[0,1) L[1,4) is printed as L[0,4).
 std::string cpuTrace(const Simulation& sim) {
     std::ostringstream out;
     const auto& segments = sim.trace().segments();
     for (std::size_t i = 0; i < segments.size(); ++i) {
         const TraceSegment& s = segments.at(i);
-        if (i) out << ' ';
+        Tick end = s.end;
+        while (i + 1 < segments.size() && segments.at(i + 1).jobId == s.jobId &&
+               segments.at(i + 1).start == end)
+            end = segments.at(++i).end;
+        if (out.tellp() > 0) out << ' ';
         out << (s.jobId ? jobLabel(sim.registry(), *s.jobId) : std::string("idle"))
-            << '[' << s.start << ',' << s.end << ')';
+            << '[' << s.start << ',' << end << ')';
     }
     return out.str();
 }

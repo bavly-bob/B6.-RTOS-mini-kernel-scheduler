@@ -1,8 +1,10 @@
 # Results: golden traces, run metrics and timer costs
 
 Marc's results package (plan pp. 15-16, 22, 26), prepared on 22 Nov 2026 from the
-commit that adds this file (run files from `4cb86e1`). The timer experiment is shared with Sarofem
-(timer manager owner); **Sarofem has not reviewed these tables yet.**
+commit that adds this file (run files from `4cb86e1`). Table 1 and the inheritance-on
+metrics row were rechecked at `60efef5`, when the scheduler started handling
+inheritance. The timer experiment is shared with Sarofem (timer manager owner);
+**Sarofem has not reviewed these tables yet.**
 
 Every table below is printed by a program in this repository, so it can be checked
 and rerun; nothing was typed in by hand except the golden values, which come from
@@ -31,7 +33,7 @@ at the horizon.
 | `suspend_resume` | fixed_priority | off | X[0,1) idle[1,3) X[3,6) idle[6,7) S[7,9) idle[9,10) | same | S:9 X:6 | S:9 X:6 | yes | yes |
 | `semaphore_signal` | fixed_priority | off | P[0,2) C[2,3) P[3,4) idle[4,5) | same | C:3 P:4 | C:3 P:4 | yes | yes |
 | `priority_inversion` | fixed_priority | off | L[0,2) M[2,6) L[6,8) H[8,9) idle[9,10) | same | L:8 H:9!6 M:6 | L:8 H:9!6 M:6 | yes | yes |
-| `priority_inversion` | fixed_priority | **on** | L[0,4) H[4,5) M[5,9) idle[9,10) | run invalid: scheduler adapter must implement onPriorityChanged for inheritance | L:4 H:5 M:9 | - | yes | **NO** |
+| `priority_inversion` | fixed_priority | **on** | L[0,4) H[4,5) M[5,9) idle[9,10) | same | L:4 H:5 M:9 | L:4 H:5 M:9 | yes | yes |
 | `rm_edf_compare` | rate_monotonic | off | A0[0,2) B0[2,5) A1[5,7) B0[7,8) | same | A0:2 B0:8!7 A1:7 B1:open | same | yes | yes |
 | `rm_edf_compare` | edf | off | A0[0,2) B0[2,6) A1[6,8) | same | A0:2 B0:6 A1:8 B1:open | same | yes | yes |
 | `rm_edf_compare` | fixed_priority | off | A0[0,2) B0[2,5) A1[5,7) B0[7,8) | same | A0:2 B0:8!7 A1:7 B1:open | same | yes | yes |
@@ -39,11 +41,11 @@ at the horizon.
 | `overload` | rate_monotonic | off | 9 jobs, misses > 0, idle 0 | 9 jobs, misses 4, idle 0 | not stated | same as fixed_priority | yes | yes |
 | `overload` | edf | off | 9 jobs, misses > 0, idle 0 | 9 jobs, misses 8, idle 0 | not stated | A0:3 B0:6!5 A1:9!8 B1:12!10 A2:15!12 B2:18!15 A3:open!16 B3:open!20 A4:open!20 | yes | yes |
 
-**11 of 12 match on both backends.** The one mismatch is golden trace B with
-inheritance ON: the resource manager implements donation, but the scheduler does not
-yet override `onPriorityChanged`, so the run stops at tick 1 and is exported as
-invalid (owner: Youssef / Moataz). Its golden trace is only checked as a design
-fixture (`dashboard/fixtures/inversion_on.design.json`).
+**12 of 12 match on both backends.** With inheritance ON the run file shows L as
+two segments, L[0,1) and L[1,4), because the schema starts a new segment when the
+priority changes (L is boosted from 1 to 3 at tick 1). `b6_golden` joins adjacent
+segments of the same job before comparing, since golden traces state who owns the
+CPU, not at which priority.
 
 `sleep_order` and `overload` golden traces state a wake order and properties, not
 completions; the measured completions are listed for the record.
@@ -61,6 +63,7 @@ completed jobs only (late ones included); jitter = max − min, "–" with one s
 | `suspend_resume` | fixed_priority | 6/10 (60%) | 2 / 0 / 0 | – | – | one-shot tasks |
 | `semaphore_signal` | fixed_priority | 4/5 (80%) | 2 / 0 / 0 | – | – | one-shot tasks |
 | `priority_inversion` | fixed_priority | 9/10 (90%) | 3 / 0 / 1 | – | – | one-shot tasks |
+| `priority_inversion` (inheritance on) | fixed_priority | 9/10 (90%) | 3 / 0 / 0 | – | – | one-shot tasks; H response 4 instead of 8 |
 | `rm_edf_compare` | rate_monotonic | 8/8 (100%) | 3 / 1 / 1 | 97.14% | 82.84% | demand above the bound is inconclusive |
 | `rm_edf_compare` | edf | 8/8 (100%) | 3 / 1 / 0 | 97.14% | – | policy is edf |
 | `rm_edf_compare` | fixed_priority | 8/8 (100%) | 3 / 1 / 1 | 97.14% | – | policy is fixed_priority |
