@@ -5,7 +5,7 @@
     "scenarioId":"suspend_resume",
     "label":"Suspending a ready job and a sleeping job",
     "evidenceType":"engine_run",
-    "engineRevision":"b5dfd58",
+    "engineRevision":"60efef5",
     "createdAt":null
   },
   "config":{

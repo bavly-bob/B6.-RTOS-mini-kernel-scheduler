@@ -21,7 +21,7 @@ exported at engine revision `b2b0837`.
 | 0:00-1:00 | Problem, data structures, CLI to JSON to dashboard | Youssef | none |
 | 1:00-2:00 | Round-robin, preemption, state inspector | Youssef | `rr_preemption-fixed_priority-heap` |
 | 2:00-3:00 | Same wake order on two timer backends | Sarofem | `sleep_order-fixed_priority-sorted_list`, `-heap` |
-| 3:00-5:00 | Inversion OFF/ON, owner, waiter, priority; semaphore | Moataz | `priority_inversion-fixed_priority-heap`, `semaphore_signal-fixed_priority-heap` |
+| 3:00-5:00 | Inversion OFF/ON, owner, waiter, priority; semaphore | Moataz | `priority_inversion-fixed_priority-heap`, `-heap-inheritance`, `semaphore_signal-fixed_priority-heap` |
 | 5:00-6:30 | RM against EDF, deadline result | Marc | `rm_edf_compare-rate_monotonic-heap`, `rm_edf_compare-edf-heap` |
 | 6:30-8:00 | Inspection, metrics, design, limits, next phase | Bavly | `overload-fixed_priority-heap` |
 
@@ -35,9 +35,10 @@ and both show B then D waking.
 **Inversion OFF.** Choose H in the inspector and go to 4: BLOCKED on mutex 0, owned by L,
 while M runs. In *Key events* select the miss at 6: the chart shows ✕. H completes at 9.
 
-**Inversion ON.** See "Known limits". Until the engine can export it, use
-`dashboard/fixtures/inversion_on.design.json` and **say it is sample data**: the page
-shows a banner. L is boosted from 1 to 3 at tick 1 and returns to 1 at 4; H completes at 5.
+**Inversion ON.** Import `priority_inversion-fixed_priority-heap-inheritance` (a real
+engine run). Go to 1: H blocks on mutex 0 and L is boosted from 1 to 3, so M cannot run
+when it arrives at 2. At 4 L unlocks and returns to 1; H gets the mutex and completes at
+5, before its deadline 6. Switch to the OFF run at the same tick to compare.
 
 **Semaphore.** Tick 1: C waits on semaphore 0. Tick 2: P signals and C runs; the count
 stays 0 because the permit goes straight to C.
@@ -61,8 +62,7 @@ cost, one mutex per job. Inside those limits, every run can be repeated and expl
 
 ## Known limits to state openly
 
-- `b6_sim --inheritance on` is not connected end to end: the run stops at tick 1 and is
-  exported as invalid.
+- None open. (`--inheritance on` is connected end to end since commit `60efef5`.)
 
 When one of these lands, export the new run, replace the fixture step, run
 `node dashboard/browser.check.js demo/screenshots`, and update this list.
