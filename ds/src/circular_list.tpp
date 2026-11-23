@@ -47,6 +47,17 @@ typename CircularList<T>::Node* CircularList<T>::pushBack(T* value) {
 }
 
 template <typename T>
+typename CircularList<T>::Node* CircularList<T>::pushFront(T* value) {
+    // Inserting before the head is inserting after the tail; then the new
+    // node simply becomes the head.
+    Node* node = pushBack(value);
+    if (node != nullptr) {
+        head_ = node;
+    }
+    return node;
+}
+
+template <typename T>
 T* CircularList<T>::popFront() noexcept {
     if (head_ == nullptr) {
         return nullptr;

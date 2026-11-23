@@ -70,6 +70,8 @@ Equal priorities share the CPU with a slice of `quantumTicks`.
 - Completing or blocking comes first: rotation only applies to a job that
   still needs CPU.
 - Waking, being granted a resource, or resuming gives a fresh slice.
+- A priority change from inheritance never resets the slice. When a running
+  owner drops back to its base priority it stays first in its ring.
 
 ## Script steps
 
@@ -108,9 +110,16 @@ act on the task's most recent unfinished job.
   the scheduler only updates ring/heap membership there and never dispatches.
 - `TimerManager`: the scheduler calls `sleep` in phase 3 and `expireDue` in
   phase 2, and enqueues only woken jobs that are READY.
-- `changeEffectivePriority(job, p, reason)`: the requeue hook for priority
-  inheritance. It moves a runnable job between rings, keeps the bitmap in step,
-  and emits `PRIORITY_CHANGE`. Not yet called: donation is Moataz's part.
+- `onPriorityChanged(job, change)`: called by the resource manager when
+  inheritance raises an owner's priority (reason `inheritance`) or an unlock
+  restores it (reason `mutex_release`). The manager has already set
+  `effectivePriority`; the scheduler moves the job's ring membership and bitmap
+  bit. A READY job joins the back of its new ring; the RUNNING job goes to the
+  front (`CircularList::pushFront`), keeping the CPU and the rest of its slice.
+  Phase 3 then reselects. The `PRIORITY_CHANGE` event is held and written just
+  after the `BLOCK` / `UNLOCK` / `RESUME` event that caused it.
+- `changeEffectivePriority(job, p, reason)`: the same move, called directly
+  (used by tests); it sets the priority itself and writes the event at once.
 
 ## Invariants (checked at every boundary)
 
@@ -129,6 +138,8 @@ with an `ERROR` event, never presented as a successful run.
 | --- | --- |
 | `rr_preemption` | A[0,1) B[1,2) H[2,3) A[3,4) B[4,5) A[5,6) B[6,7); H=3, A=6, B=7 |
 | `priority_inversion` (OFF) | L[0,2) M[2,6) L[6,8) H[8,9); H completes 9, missed at 6 |
+| `priority_inversion` (ON) | L[0,1) L[1,4) H[4,5) M[5,9); L 1->3 at 1, 3->1 at 4; H completes 5, no miss (L's run is two segments because its priority changed) |
+| restored owner (test only) | after L's priority drops at unlock, L keeps first place in its ring and the rest of its slice |
 | `sleep_order` | wakes B@110, D@110, C@120, A@130 on both timer backends |
 | `suspend_resume` | X[0,1) idle[1,3) X[3,6) idle[6,7) S[7,9); timer fires at 5 while suspended |
 | `semaphore_signal` | P[0,2) C[2,3) P[3,4); permit granted directly |
@@ -169,8 +180,8 @@ plan's risk table (p.29, owner Youssef), which asks for this revision to be
 recorded rather than silently dropped. It can be revisited after Milestone 2
 if a measured need appears (for example, ordered range queries over timers).
 
-## Not done here (other members' parts)
+## Other members' parts it connects to
 
-| Missing | Owner | Effect today |
-| --- | --- | --- |
-| Priority inheritance (donation and restore) | Moataz | `--inheritance on` is refused with a clear message; the hook it needs exists. |
+Everything the scheduler waits on is now in place: priority inheritance
+(Moataz, through `onPriorityChanged`), rate-monotonic priorities and the run
+metrics (Marc). Nothing in this component is left unfinished.

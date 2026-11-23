@@ -88,11 +88,16 @@ public:
     // ResourceSchedulerHooks: membership updates only, never a dispatch.
     void onBlocked(Job& job) override;
     void onReady(Job& job) override;
+    // Priority inheritance (Moataz's ResourceManager): effectivePriority is
+    // already change.to. Moves ready membership from change.from to change.to
+    // and records PRIORITY_CHANGE; the event is written after the LOCK/BLOCK/
+    // UNLOCK/RESUME event that caused it, so the trace reads in cause order.
+    void onPriorityChanged(Job& job, const ResourcePriorityChange& change) override;
 
-    // Requeue hook for priority inheritance (Moataz): moves a runnable job to
-    // the ring of `newPriority` (fixed priority only), keeps the bitmap in
-    // step and emits PRIORITY_CHANGE. A blocked job just records the new
-    // value. Reordering resource wait queues stays with the ResourceManager.
+    // Direct requeue (used by tests): moves a runnable job to the ring of
+    // `newPriority` (fixed priority only), keeps the bitmap in step and emits
+    // PRIORITY_CHANGE at once. A blocked job just records the new value.
+    // Reordering resource wait queues stays with the ResourceManager.
     void changeEffectivePriority(Job& job, int newPriority, const char* reason);
 
     // Throws std::logic_error if any ready-structure invariant is broken:
@@ -141,6 +146,13 @@ private:
     JobId readyBuffer_[kMaxJobs]{};      // Snapshot ready order (scratch).
     EdfEntry edfBuffer_[kMaxJobs]{};     // EDF snapshot sorting (scratch).
 
+    // PRIORITY_CHANGE events raised inside a resource call, written once the
+    // caller has written its own event. One lock donates once; one unlock
+    // restores the owner and may donate to the new owner, so 4 is ample.
+    static constexpr std::size_t kMaxPendingPriorityEvents = 4;
+    TraceEvent pendingPriority_[kMaxPendingPriorityEvents]{};
+    std::size_t pendingPriorityCount_ = 0;
+
     // Boundary phases.
     void boundary(Tick t);
     void settle();
@@ -173,6 +185,9 @@ private:
     void resume(Job& job);
 
     void emit(TraceEvent event);
+    void flushPriorityEvents();
+    void moveRing(Job& job, int from, int to);
+    void checkPriority(int priority) const;
     TraceEvent event(EventType type, const char* reason) const;
 };
 

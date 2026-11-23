@@ -201,9 +201,6 @@ int main(int argc, char** argv) {
         return ok ? 0 : 1;
     } catch (const std::exception& e) {
         std::cerr << "cannot run " << scenarioId << ": " << e.what() << '\n';
-        if (config.inheritance)
-            std::cerr << "(priority inheritance is Moataz's part and not implemented yet; "
-                         "use --inheritance off)\n";
         return 2;
     }
 }

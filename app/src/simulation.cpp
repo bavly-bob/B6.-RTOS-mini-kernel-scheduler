@@ -10,9 +10,9 @@ Simulation::Simulation(const ScenarioInput& input)
       trace_(registry_.scenario().config),
       scheduler_(registry_, trace_, input.controls, input.controlCount),
       timers_(registry_) {
-    // The resource manager supports fixed priority only (the validator keeps
-    // RM/EDF scenarios resource-free). Its constructor rejects modes it does
-    // not implement yet, e.g. inheritance=true, with std::invalid_argument.
+    // The resource manager supports fixed priority, with inheritance off or
+    // on (the validator keeps RM/EDF scenarios resource-free). With
+    // inheritance on it calls Scheduler::onPriorityChanged to requeue jobs.
     if (registry_.scenario().config.policy == Policy::FixedPriority)
         resources_.emplace(registry_, scheduler_);
     scheduler_.attach(resources_ ? &*resources_ : nullptr, timers_);

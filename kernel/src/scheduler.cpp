@@ -356,6 +356,7 @@ bool Scheduler::runZeroTimeSteps(Job& job, StepMode mode) {
             ++job.scriptIndex;
             if (result == AcquireResult::Acquired) {
                 emit(event(EventType::Lock, "acquired").job(job).resource(id));
+                flushPriorityEvents();  // A new owner may inherit from waiters.
                 break;
             }
             // onBlocked has already removed it from the ready ring.
@@ -363,6 +364,7 @@ bool Scheduler::runZeroTimeSteps(Job& job, StepMode mode) {
             const MutexRecord* m = resources_->findMutex(id);
             if (m && m->ownerJobId) blocked.with("ownerJobId", *m->ownerJobId);
             emit(blocked);
+            flushPriorityEvents();  // The owner inherits from this waiter.
             return false;
         }
         case OpCode::Unlock: {
@@ -370,6 +372,7 @@ bool Scheduler::runZeroTimeSteps(Job& job, StepMode mode) {
             const std::optional<JobId> granted = resources_->unlock(job.jobId, id);
             ++job.scriptIndex;
             emit(event(EventType::Unlock, "released").job(job).resource(id));
+            flushPriorityEvents();  // Owner restored; the new owner may inherit.
             noteGranted(granted, id, "mutex_granted");
             break;
         }
@@ -470,29 +473,37 @@ void Scheduler::resume(Job& job) {
         // The mutex may have been released while this waiter was suspended.
         const ResourceId id = *job.blockedResourceId;
         noteGranted(resources_->resumeMutexWait(job.jobId), id, "mutex_granted");
+        flushPriorityEvents();  // A granted waiter may inherit from the rest.
     }
 }
 
 // ---- Priority moves (requeue hook for inheritance) ----------------------------
 
-void Scheduler::changeEffectivePriority(Job& job, int newPriority, const char* reason) {
-    if (newPriority < 0 || newPriority >= PriorityBitmap::kPriorityLevels)
+void Scheduler::checkPriority(int priority) const {
+    if (priority < 0 || priority >= PriorityBitmap::kPriorityLevels)
         throw std::invalid_argument("effective priority must be in 0..31");
     if (edf_) throw std::logic_error("priority changes are not defined under EDF");
+}
+
+// Move ring membership and bitmap together, so they never disagree. A READY
+// job joins the back of its new ring. The RUNNING job goes to the front: it
+// keeps the CPU and its partial slice (no rotation, no quantum reset); phase
+// 3 reselects if another job is now more urgent. No node means no move.
+void Scheduler::moveRing(Job& job, int from, int to) {
+    if (!job.readyNode) return;
+    if (!rings_[from].remove(job.readyNode)) throw std::logic_error("job is not in its ring");
+    job.readyNode = nullptr;
+    if (rings_[from].isEmpty()) bitmap_.clear(from);
+    job.readyNode = &job == running_ ? rings_[to].pushFront(&job) : rings_[to].pushBack(&job);
+    bitmap_.set(to);
+}
+
+void Scheduler::changeEffectivePriority(Job& job, int newPriority, const char* reason) {
+    checkPriority(newPriority);
     const int old = job.effectivePriority;
     if (old == newPriority) return;
-    // Move ring membership and bitmap together, so they never disagree.
-    // The running job stays RUNNING; phase 3 reselects if needed.
-    if (job.readyNode) {
-        if (!rings_[old].remove(job.readyNode)) throw std::logic_error("job is not in its ring");
-        job.readyNode = nullptr;
-        if (rings_[old].isEmpty()) bitmap_.clear(old);
-        job.effectivePriority = newPriority;
-        job.readyNode = rings_[newPriority].pushBack(&job);
-        bitmap_.set(newPriority);
-    } else {
-        job.effectivePriority = newPriority;
-    }
+    job.effectivePriority = newPriority;
+    moveRing(job, old, newPriority);
     emit(event(EventType::PriorityChange, reason).job(job).with("from", old).with("to", newPriority));
 }
 
@@ -507,9 +518,24 @@ void Scheduler::onReady(Job& job) {
     enqueue(job);  // Checks READY, unsuspended and not already queued.
 }
 
+void Scheduler::onPriorityChanged(Job& job, const ResourcePriorityChange& change) {
+    checkPriority(change.to);
+    if (job.effectivePriority != change.to || change.from == change.to)
+        throw std::logic_error("onPriorityChanged: inconsistent priority change");
+    moveRing(job, change.from, change.to);
+    if (pendingPriorityCount_ == kMaxPendingPriorityEvents)
+        throw std::logic_error("too many priority changes in one resource call");
+    const char* reason =
+        change.reason == PriorityChangeReason::Inheritance ? "inheritance" : "mutex_release";
+    pendingPriority_[pendingPriorityCount_++] = event(EventType::PriorityChange, reason)
+        .job(job).resource(change.mutexId).with("from", change.from).with("to", change.to);
+}
+
 // ---- Invariants ----------------------------------------------------------------
 
 void Scheduler::checkInvariants() const {
+    if (pendingPriorityCount_ != 0)
+        throw std::logic_error("invariant: a PRIORITY_CHANGE event was not written");
     std::size_t queued = 0;
     if (edf_) {
         for (int i = 0; i < edf_heap_.size(); ++i) {
@@ -558,6 +584,11 @@ TraceEvent Scheduler::event(EventType type, const char* reason) const {
 
 void Scheduler::emit(TraceEvent e) {
     trace_.addEvent(e);  // On the event limit the trace marks itself truncated.
+}
+
+void Scheduler::flushPriorityEvents() {
+    for (std::size_t i = 0; i < pendingPriorityCount_; ++i) emit(pendingPriority_[i]);
+    pendingPriorityCount_ = 0;
 }
 
 } // namespace b6

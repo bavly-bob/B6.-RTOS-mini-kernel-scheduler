@@ -64,6 +64,10 @@ public:
     // If allocation fails, new throws and the existing list remains unchanged.
     Node* pushBack(T* value);
 
+    // Same as pushBack, but the new node becomes the head. O(1) link work.
+    // The scheduler uses it to keep a running job first in its new ring.
+    Node* pushFront(T* value);
+
     // Remove the head and return its borrowed value, or nullptr when empty.
     // The removed node's handle becomes invalid; the object stays alive. O(1).
     T* popFront() noexcept;

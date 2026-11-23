@@ -186,6 +186,24 @@ static void testRepeatedPushPop() {
     }
 }
 
+// pushFront puts the new node first without disturbing the others, in an
+// empty list and in a nonempty one; its handle can be removed like any other.
+static void testPushFront() {
+    int values[3] = {1, 2, 3};
+    CircularList<int> list;
+    assert(list.pushFront(nullptr) == nullptr);
+    auto* b = list.pushFront(&values[1]);
+    int* one[] = {&values[1]};
+    assertOrder(list, b, one, 1);
+    list.pushBack(&values[2]);
+    auto* a = list.pushFront(&values[0]);
+    int* all[] = {&values[0], &values[1], &values[2]};
+    assertOrder(list, a, all, 3);
+    assert(list.remove(a));
+    int* rest[] = {&values[1], &values[2]};
+    assertOrder(list, b, rest, 2);
+}
+
 // A deliberately small stand-in for a caller-owned task. Its destructor count
 // makes accidental deletion by popFront, remove, or list destruction visible.
 struct TrackedValue {
@@ -225,4 +243,5 @@ void test_circular_list() {
     testDuplicatesAndForeignHandles();
     testRepeatedPushPop();
     testNonOwningLifetime();
+    testPushFront();
 }

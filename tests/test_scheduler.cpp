@@ -43,10 +43,12 @@ static ScenarioInput& presetInput(const std::string& id) {
 
 static std::unique_ptr<Simulation> runPreset(const std::string& id,
                                              std::optional<Policy> policy = std::nullopt,
-                                             TimerBackend timer = TimerBackend::SortedList) {
+                                             TimerBackend timer = TimerBackend::SortedList,
+                                             bool inheritance = false) {
     ScenarioInput& in = presetInput(id);
     if (policy) in.scenario.config.policy = *policy;
     in.scenario.config.timerBackend = timer;
+    in.scenario.config.inheritance = inheritance;
     auto sim = std::make_unique<Simulation>(in);
     if (!sim->run()) {
         std::cerr << id << " run failed: " << sim->error() << '\n';
@@ -189,15 +191,103 @@ static void testPriorityInversionWithoutInheritance() {
     CHECK(rowAt(*sim, 4, 1).heldMutexId == 0);
 }
 
-// Inheritance ON is Moataz's donation work. Until it exists the run must be
-// refused clearly rather than silently running without inheritance.
-// When inheritance lands, replace this with the plan's ON oracle:
-// L[0,4) H[4,5) M[5,9); H completes 5; L's priority 1->3 at 1, back at 4.
-static void testInheritanceOnIsRefusedUntilImplemented() {
-    ScenarioInput& in = presetInput("priority_inversion");
-    in.scenario.config.inheritance = true;
-    const std::string error = throwsWith<std::invalid_argument>([&] { Simulation sim(in); });
-    CHECK(error.find("inheritance") != std::string::npos);
+static void checkRunProperties(const Simulation& sim);
+
+// Index of an event in the trace (its order), or -1.
+static long eventIndex(const Simulation& sim, EventType type, Tick tick, JobId jobId) {
+    const auto& all = sim.trace().events();
+    for (std::size_t i = 0; i < all.size(); ++i) {
+        const TraceEvent& e = all.at(i);
+        if (e.type == type && e.tick == tick && e.jobId == jobId) return static_cast<long>(i);
+    }
+    return -1;
+}
+
+// Plan trace B, inheritance ON (Moataz's donation through Scheduler::
+// onPriorityChanged): H blocks on R at 1, so L inherits priority 3 and M
+// (priority 2, released at 2) cannot run in between. L unlocks at 4 and drops
+// back to 1; H gets R and runs at once.
+// Expected: L[0,1) L[1,4) (same job, now at priority 3) H[4,5) M[5,9).
+static void testPriorityInversionWithInheritance() {
+    for (TimerBackend timer : {TimerBackend::SortedList, TimerBackend::Heap}) {
+        auto sim = runPreset("priority_inversion", std::nullopt, timer, true);
+        CHECK_EQ(cpu(*sim), std::string("1[0,1) 1[1,4) 2[4,5) 3[5,9) idle[9,10)"));
+        CHECK(sim->trace().segments().at(1).effectivePriority == 3);
+        CHECK_EQ(*job(*sim, 1).completionTick, 4);  // L
+        CHECK_EQ(*job(*sim, 2).completionTick, 5);  // H: response 4, deadline 6 met.
+        CHECK_EQ(*job(*sim, 3).completionTick, 9);  // M
+        CHECK(!job(*sim, 2).deadlineMissRecorded);
+        CHECK_EQ(events(*sim, EventType::DeadlineMiss), std::string(""));
+
+        // One raise at 1 and one restore at 4, both on L, with from/to.
+        CHECK_EQ(events(*sim, EventType::PriorityChange), std::string("1@1 1@4"));
+        const TraceEvent* up = findEvent(*sim, EventType::PriorityChange, 1, 1);
+        CHECK_EQ(std::string(up->reason), std::string("inheritance"));
+        CHECK(datum(*up, "from") == 1 && datum(*up, "to") == 3 && up->resourceId == 0);
+        const TraceEvent* down = findEvent(*sim, EventType::PriorityChange, 4, 1);
+        CHECK_EQ(std::string(down->reason), std::string("mutex_release"));
+        CHECK(datum(*down, "from") == 3 && datum(*down, "to") == 1);
+        // Cause before effect: BLOCK then PRIORITY_CHANGE; UNLOCK then
+        // PRIORITY_CHANGE then the grant to H.
+        CHECK(eventIndex(*sim, EventType::Block, 1, 2) < eventIndex(*sim, EventType::PriorityChange, 1, 1));
+        CHECK(eventIndex(*sim, EventType::Unlock, 4, 1) < eventIndex(*sim, EventType::PriorityChange, 4, 1));
+        CHECK(eventIndex(*sim, EventType::PriorityChange, 4, 1) < eventIndex(*sim, EventType::Wake, 4, 2));
+
+        // While L holds R its snapshot row shows base 1, effective 3; M waits READY.
+        const SnapshotJobRow& l = rowAt(*sim, 2, 1);
+        CHECK(l.basePriority == 1 && l.effectivePriority == 3 && l.state == JobState::Running);
+        CHECK(rowAt(*sim, 2, 3).state == JobState::Ready);
+        CHECK(rowAt(*sim, 4, 2).effectivePriority == 3 && rowAt(*sim, 4, 2).state == JobState::Running);
+        checkRunProperties(*sim);
+    }
+}
+
+// Restoring the priority of the RUNNING owner keeps its place and its slice.
+// Quantum 4. L (1) locks R and runs [0,2) (L inherits 3 at 1 when H blocks).
+// At 2 L unlocks, drops to 1 and is preempted by H [2,3). L is then still the
+// front of ring 1, ahead of its peer P, with 2 slice ticks left: L [3,5),
+// slice used up, P [5,7), L [7,8). If L had gone to the back of ring 1, or
+// had got a fresh slice, P would run at 3 or L would run [3,6).
+static void testRestoredOwnerKeepsItsTurnAndSlice() {
+    static ScenarioInput in;  // Large fixed arrays: keep them off the stack.
+    in = ScenarioInput{};
+    Scenario& s = in.scenario;
+    s.config.scenarioId = "restore_keeps_turn";
+    s.config.horizonTicks = 9;
+    s.config.quantumTicks = 4;
+    s.config.inheritance = true;
+    s.mutexes[0] = {0};
+    s.mutexCount = 1;
+    const Instruction lock{OpCode::Lock, 0, ResourceId(0)}, unlock{OpCode::Unlock, 0, ResourceId(0)};
+    const Instruction end{OpCode::End, 0, std::nullopt};
+    auto run = [](Tick n) { return Instruction{OpCode::Run, n, std::nullopt}; };
+    struct Spec { const char* name; int priority; Tick release; Instruction script[5]; std::size_t length; };
+    const Spec specs[] = {
+        {"L", 1, 0, {lock, run(2), unlock, run(3), end}, 5},
+        {"P", 1, 0, {run(2), end}, 2},
+        {"H", 3, 1, {lock, run(1), unlock, end}, 4},
+    };
+    for (const Spec& spec : specs) {
+        TaskSpec& t = s.tasks[s.taskCount];
+        t.taskId = static_cast<TaskId>(s.taskCount++);
+        t.name = spec.name;
+        t.basePriority = spec.priority;
+        t.firstRelease = spec.release;
+        t.relativeDeadline = 20;
+        t.scriptLength = spec.length;
+        for (std::size_t i = 0; i < spec.length; ++i) t.script[i] = spec.script[i];
+    }
+    Simulation sim(in);
+    CHECK(sim.run());
+    // Job IDs: L=1, P=2 (both t=0, task order), H=3 (t=1).
+    CHECK_EQ(cpu(sim), std::string("1[0,1) 1[1,2) 3[2,3) 1[3,5) 2[5,7) 1[7,8) idle[8,9)"));
+    CHECK_EQ(events(sim, EventType::PriorityChange), std::string("1@1 1@2"));
+    CHECK_EQ(std::string(findEvent(sim, EventType::Preempt, 2, 1)->reason), std::string("higher_priority"));
+    CHECK_EQ(std::string(findEvent(sim, EventType::Preempt, 5, 1)->reason), std::string("quantum_expired"));
+    CHECK_EQ(*job(sim, 1).completionTick, 8);
+    CHECK_EQ(*job(sim, 2).completionTick, 7);
+    CHECK_EQ(*job(sim, 3).completionTick, 3);
+    checkRunProperties(sim);
 }
 
 // Plan trace C: four sleeps started at 100. Both timer backends must agree.
@@ -397,21 +487,28 @@ static void testAllPresetsAndRepeatability() {
             ScenarioInput& probe = presetInput(id);
             probe.scenario.config.policy = policy;
             if (!validateScenario(probe.scenario).empty()) continue;
-            for (TimerBackend timer : {TimerBackend::SortedList, TimerBackend::Heap}) {
-                auto first = runPreset(id, policy, timer);
-                checkRunProperties(*first);
-                // Same input, same decisions: the exported files are identical.
-                auto second = runPreset(id, policy, timer);
-                const std::string runId = id + "-" + toString(policy) + "-" + toString(timer);
-                const std::string text = exported(*first, runId);
-                CHECK(text == exported(*second, runId));
-                std::ofstream(g_outputDir + "/" + runId + ".json") << text;
-                ++written;
+            // Inheritance only changes anything when there is a mutex.
+            const bool hasMutex = probe.scenario.mutexCount != 0;
+            for (bool inheritance : {false, true}) {
+                if (inheritance && !hasMutex) continue;
+                for (TimerBackend timer : {TimerBackend::SortedList, TimerBackend::Heap}) {
+                    auto first = runPreset(id, policy, timer, inheritance);
+                    checkRunProperties(*first);
+                    // Same input, same decisions: the exported files are identical.
+                    auto second = runPreset(id, policy, timer, inheritance);
+                    std::string runId = id + "-" + toString(policy) + "-" + toString(timer);
+                    if (inheritance) runId += "-inheritance";
+                    const std::string text = exported(*first, runId);
+                    CHECK(text == exported(*second, runId));
+                    std::ofstream(g_outputDir + "/" + runId + ".json") << text;
+                    ++written;
+                }
             }
         }
     }
-    // FP everywhere; RM and EDF for the 2 periodic presets.
-    CHECK(written == 2 * presetCount() + 2 * 2 * 2);
+    // FP everywhere; RM and EDF for the 2 periodic presets; inheritance on
+    // for the 1 preset with a mutex.
+    CHECK(written == 2 * presetCount() + 2 * 2 * 2 + 2);
 }
 
 // ---- Requeue hook for inheritance ---------------------------------------------------
@@ -514,7 +611,8 @@ int main(int argc, char** argv) {
     g_outputDir = argv[1];
     testRoundRobinAndPreemption();
     testPriorityInversionWithoutInheritance();
-    testInheritanceOnIsRefusedUntilImplemented();
+    testPriorityInversionWithInheritance();
+    testRestoredOwnerKeepsItsTurnAndSlice();
     testSleepOrderOnBothBackends();
     testSuspendResume();
     testSemaphoreSignal();
