@@ -1,69 +1,81 @@
 # B6 Scheduler Dashboard
 
-Open `dashboard/index.html` directly in a browser (no server, no network, no install).
-Click **Import run(s)** and pick one or more exported run files. Pick a run from the drop-down.
+Open `dashboard/index.html` directly in a browser. No server, internet connection or installation is needed.
+On the welcome screen, choose **Choose / import runs** and select one or more JSON files from `runs/`.
+The menu at the top switches between imported recordings; **Import runs** adds more files.
 
-Hand-written sample data, always shown with a SAMPLE DATA banner:
+The dashboard plays back exported C++ results. It never runs the scheduler, changes settings in a recording,
+or recomputes engine metrics. To change the policy, timer backend or inheritance setting, generate a new
+run with the CLI and import it.
 
-- `fixtures/rr_preemption.design.json`: golden trace A, without snapshots.
-- `fixtures/inversion_on.design.json`: golden trace B with inheritance ON. It stands in until the engine can
-  export that run; replace it in the demonstration with the real file as soon as one exists.
+## Presenting a run
 
-The page only displays what the file contains. It does not run or re-schedule anything.
+- The heading names the scenario and explains its purpose in one sentence. The three badges show its
+  policy, timer backend and inheritance setting. Hover over the heading to see the original run ID.
+- The Gantt chart shows the entire recorded CPU timeline, with one lane per job. A bar is an execution
+  interval; idle time has its own lane. Release lines, deadline lines and missed-deadline crosses refer
+  to the full recording. A lime outline marks an inherited priority; `P` is the effective priority.
+- **Play / Pause**, **Prev**, **Next**, **Reset** and the slider select recorded time. The speed menu changes
+  playback speed only. The cursor moves smoothly between ticks, while side panels always use a whole-tick
+  snapshot. The tick label identifies that snapshot. Reduced-motion mode moves the cursor in whole ticks.
+- The left panel shows the running job, ready order, blocked or suspended jobs, and resource owners,
+  permits and waiters. `J` identifies a job, so repeated releases of the same task can be distinguished.
+- Select a chart lane, a queue entry or a job from **Inside the job** to inspect its state. The priority
+  card highlights donation and restoration. For EDF it shows the absolute deadline instead, because
+  EDF uses deadlines to choose between ready jobs.
+- **Focus chart** hides the side panels and widens the timeline. Long recordings scroll horizontally;
+  lane names stay pinned. Many-job recordings also scroll vertically inside the chart.
+- Switching between recordings with the same scenario ID preserves the selected tick and job where
+  possible, making OFF/ON and RM/EDF comparisons easier.
+- The B6 button returns to the welcome screen. **Return to imported run** restores the view. Imported
+  files stay in memory until the page is reloaded. Playback pauses when the page is hidden.
 
-Self-checks (Node.js only, nothing to install):
+The old job-state, task, final-outcome, event-log and metrics tables are intentionally absent from this
+presentation view. A short sentence beneath the controls explains one significant event at the selected
+tick. Detailed evidence and metrics remain in the exported JSON.
 
-- `node dashboard/validate.test.js`: import checks.
-- `node dashboard/view.test.js`: selected-tick accuracy on every file in `runs/`.
-- `node dashboard/browser.check.js`: opens the page from disk in headless Chrome/Edge with the network
-  off and uses it (Node 22+; set `BROWSER` if the browser is not found). Add a directory to save screenshots:
-  `node dashboard/browser.check.js demo/screenshots`.
+## Accuracy and evidence
 
-## Using it
+The snapshot at tick `t` records settled decisions at `t`, before the interval `[t, t+1)` runs. A missing
+snapshot is reported explicitly: the UI never substitutes a neighboring snapshot or a job's final state.
+The full chart may show a future deadline miss, while the inspector correctly says it has not happened
+yet at the selected tick.
 
-- **Reset, Previous, Play/Pause, Next** and the slider only change the selected tick of the recording.
-- Choose a job in the **Inspector** or select a row in **Job states**.
-- Select an event to jump to its tick and job.
-- The view at tick `t` is the snapshot recorded at `t`: decisions at `t` have been made, `[t, t+1)` has not run.
-  If a file has no snapshot at that tick the page says so; it never borrows another tick's state.
-- A boosted job is outlined in the Gantt chart with its effective priority; a missed deadline is marked ✕.
-- **Key events** lists every priority change, deadline miss and error of the run.
-- Switching to another run of the same scenario (OFF/ON, RM/EDF) keeps the selected tick and job.
-- Metrics come from the file only. If the engine exported none, the page says so and shows none.
-- **Final outcomes** is the only table that shows the end of the run instead of the selected tick.
-- "CPU left in this RUN" is the rest of the current RUN step. "not started" means the step has not been loaded yet.
+Real inheritance examples are available in `runs/priority_inversion-fixed_priority-heap-inheritance.json`
+and its `sorted_list` counterpart. The files in `dashboard/fixtures/` are hand-written test samples and
+always display a **SAMPLE DATA** banner. Invalid or truncated recordings and exported warnings remain
+visible above the chart; simplifying the layout does not hide them.
 
-## Fields the dashboard currently reads (schemaVersion 1)
+`app.js` retains the existing import validator and pure recorded-state helpers. `presentation.js` owns
+the UI, navigation, chart rendering and animation. Both are ordinary scripts so `file://` opening works.
+The local Oxanium and Space Mono font assets include their licenses; no external assets are requested.
 
-This is the consumer side of the contract for Sarofem's exporter. Names follow `kernel/include/types.h`.
-Unknown times are JSON `null`, never 0 or the horizon.
+## Checks
 
-| Field | Used for |
-| --- | --- |
-| `schemaVersion` = 1 | any other value is rejected |
-| `run.{runId, scenarioId, label, evidenceType, engineRevision}` | metadata; `evidenceType` must be `engine_run` or `design_fixture` (sample banner) |
-| `config.{policy, timerBackend, inheritance, quantumTicks, tickMs, horizonTicks, contextSwitchCostTicks}` | metadata; `horizonTicks` sets the Gantt width |
-| `tasks[].{taskId, name, basePriority, firstRelease, periodTicks, relativeDeadline, script}` | task table, lane names; `script` is a display string |
-| `jobs[].{jobId, taskId, releaseTick, absoluteDeadline, firstStartTick, completionTick, totalCpuUsed, finalState, deadlineMissed, deadlineMissTick}` | one Gantt lane per job, release/deadline markers, job table |
-| `segments[].{start, end, jobId, basePriority, effectivePriority}` | CPU bars; `jobId: null` is idle; sorted, non-overlapping, `0 <= start < end <= horizon` |
-| `metrics.overall` | shown with units; missing values are "not given" or "not applicable" |
-| `metrics.perTask[].{taskId, completedSamples, responseMin, responseMean, responseMax, jitter, misses}` | per-task table; `jitter: null` with < 2 samples shows "insufficient samples" |
-| `validation.{status, error, warnings, limitsHit, traceTruncated}` | notes above the run; an invalid run gets a red banner |
-| `snapshots[]` | slider, inspector, job states, resources, ready order and sleepers; looked up by exact `tick` |
-| `events[]` | event list; `type`, `reason`, `resourceId` and `data` are shown as text |
+Run from the repository root:
 
-## Import checks
+```sh
+node dashboard/validate.test.js
+node dashboard/view.test.js
+node dashboard/browser.check.js
+```
 
-A file is rejected, with the failing field named, for:
+The browser checks require Node 22+ and Chrome or Edge. Set `BROWSER` to its executable if it is not
+detected. They open the page from disk with networking disabled, exercise real imports and playback,
+check OFF/ON history, warnings, unsafe text, long and empty runs, keyboard lane selection, narrow screens,
+reduced motion and laptop playback controls. To save screenshots outside the repository:
 
-- text that is not JSON, files over 32 MiB, or a `schemaVersion` other than 1;
-- missing objects or arrays, or rows that are not objects;
-- unknown policy, timer backend, state, block reason or event type;
-- `edf` or `rate_monotonic` combined with inheritance, mutexes or semaphores;
-- duplicate task, job or resource IDs, or references to unknown ones;
-- intervals that are negative, empty, overlapping, out of order or past the horizon;
-- events out of `(tick, phase, seq)` order, or snapshot ticks that do not increase;
-- more than one RUNNING job, or a `runningJobId` that disagrees with the rows;
-- semaphore counts outside `0..maxCount`, or a horizon above 2,000 ticks.
+```sh
+node dashboard/browser.check.js ../output/dashboard-review
+```
 
-A run whose own `validation.status` is `invalid` is still accepted for inspection.
+## Unchanged import contract
+
+Schema version 1 is required. The existing validator checks object and array shapes, allowed policies,
+backends, states, block reasons and event types; unique IDs and valid references; ordered non-overlapping
+intervals; ordered events and snapshot ticks; a single consistent running job; resource and semaphore
+bounds; and the 2,000-tick horizon limit. Files larger than 32 MiB are refused. EDF/RM recordings combined
+with resource synchronization or inheritance are refused under the current engine's supported modes.
+
+A structurally valid recording with `validation.status: "invalid"` can still be inspected with its
+warning banner. The C++ engine, exporter, run schema and committed run files are unchanged by this UI.

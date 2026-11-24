@@ -3,95 +3,88 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>B6 Scheduler Dashboard</title>
+  <meta name="color-scheme" content="dark">
+  <title>B6 · RTOS mini-kernel</title>
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-  <header class="bar">
-    <h1>B6 Scheduler Dashboard</h1>
-    <label class="button">
-      Import run(s)
-      <input id="file" type="file" accept=".json,application/json" multiple hidden>
-    </label>
-    <select id="runSelect" aria-label="Imported run" disabled>
-      <option>No run imported</option>
-    </select>
+  <input id="file" type="file" accept=".json,application/json" multiple hidden>
+  <header class="topbar">
+    <button id="home" class="brand" aria-label="B6 welcome screen"><span class="brand-mark">B6</span><span>RTOS <span class="muted">/ mini-kernel</span></span></button>
+    <span class="top-note">ONE CPU. EVERY DECISION VISIBLE.</span>
+    <div id="runTools" class="run-tools" hidden>
+      <label class="sr-only" for="runSelect">Imported run</label>
+      <select id="runSelect" disabled><option>No run imported</option></select>
+      <button id="importMore" class="subtle">Import runs</button>
+    </div>
   </header>
-
-  <p class="note">Recorded playback only: this page displays runs exported by the C++ simulator and never re-runs or recomputes the schedule. To change a setting, run the CLI again and import the new file.</p>
   <div id="errors" role="alert"></div>
-
-  <main id="view" hidden>
-    <div id="fixtureBanner" class="fixture" hidden>SAMPLE DATA: design_fixture, hand-written for the dashboard and not produced by the engine.</div>
-    <div id="runNotes" role="status" hidden></div>
-
-    <div class="layout">
-      <section class="card">
-        <h2>Run</h2>
-        <dl id="runMeta" class="meta"></dl>
-      </section>
-
-      <div>
-      <section class="card">
-        <h2>Gantt chart</h2>
-        <div class="legend"><span class="sw idle"></span>idle <span class="sw dl"></span>deadline <span class="sw rel"></span>release <span class="sw cur"></span>selected tick <span class="missKey">✕</span>deadline missed <span class="sw bst"></span>boosted priority (P = effective)</div>
-        <div class="scroll"><svg id="gantt" role="img" aria-label="CPU intervals per job"></svg></div>
-        <div class="controls">
-          <button type="button" id="reset">Reset</button>
-          <button type="button" id="prev">Previous</button>
-          <button type="button" id="play">Play</button>
-          <button type="button" id="next">Next</button>
-          <input type="range" id="slider" min="0" max="0" value="0" step="1" aria-label="Selected tick">
-          <output id="tickLabel"></output>
-        </div>
-        <p id="noSnapshot" class="fixture" hidden>This run file has no snapshot at the selected tick, so no job or resource state is shown.</p>
-        <dl id="queues" class="meta"></dl>
-      </section>
-
-      <section class="card">
-        <h2>Job states <small class="tickNow"></small></h2>
-        <div class="scroll"><table id="states"></table></div>
-      </section>
-      </div>
-
-      <section class="card">
-        <h2>Inspector <small class="tickNow"></small></h2>
-        <label>Job <select id="jobSelect"></select></label>
-        <dl id="inspector" class="meta narrow"></dl>
-      </section>
+  <main id="welcome" class="welcome">
+    <div class="hero-grid" aria-hidden="true"></div>
+    <div class="hero-copy">
+      <p class="eyebrow">B6 / RTOS SCHEDULER</p>
+      <h1>Every tick.<br><span>A decision.</span></h1>
+      <p class="hero-description">One processor. Competing tasks.<br>See how our mini-kernel decides what runs next.</p>
+      <button id="importStart" class="primary hero-button">Choose / import runs <span class="button-icon" aria-hidden="true">+</span></button>
+      <p class="import-hint">Select one or more JSON files from the project's <strong>runs</strong> folder.</p>
+      <button id="returnToRun" class="text-button" hidden>Return to imported run</button>
     </div>
-
-    <div class="two">
-      <section class="card">
-        <h2>Resources <small class="tickNow"></small></h2>
-        <div class="scroll"><table id="resources"></table></div>
-      </section>
-      <section class="card">
-        <h2>Events near the selected tick <small>(select one to jump to it)</small></h2>
-        <div id="events" class="events"></div>
-        <h2>Key events <small>(priority changes, misses and errors in the whole run)</small></h2>
-        <div id="keyEvents" class="events"></div>
-      </section>
+    <div class="hero-art" aria-hidden="true">
+      <svg viewBox="0 0 600 470" class="network-art">
+        <defs><pattern id="dots" width="24" height="24" patternUnits="userSpaceOnUse"><circle cx="1" cy="1" r="1" fill="#293942"/></pattern></defs>
+        <rect width="600" height="470" fill="url(#dots)"/>
+        <circle class="orbit" cx="300" cy="205" r="154"/>
+        <circle class="orbit inner-orbit" cx="300" cy="205" r="123"/>
+        <path class="network-link" d="M97 125H167V205H243 M357 205H425V125H502 M300 262V330 M97 125V330H503V125"/>
+        <path class="flow" d="M97 125H167V205H243 M357 205H425V125H502 M300 262V330"/>
+        <g class="node"><rect x="30" y="95" width="135" height="60" rx="8"/><text x="97" y="121">READY QUEUE</text><text x="97" y="142" class="node-sub">who runs next?</text></g>
+        <g class="node"><rect x="435" y="95" width="135" height="60" rx="8"/><text x="502" y="121">TIMERS</text><text x="502" y="142" class="node-sub">when to wake?</text></g>
+        <g class="cpu-node"><rect x="243" y="148" width="114" height="114" rx="15"/><rect x="254" y="159" width="92" height="92" rx="8"/><text x="300" y="206">CPU</text><text x="300" y="231">ONE CORE</text></g>
+        <g class="node"><rect x="227" y="304" width="146" height="54" rx="8"/><text x="300" y="327">RESOURCES</text><text x="300" y="346" class="node-sub">mutex / semaphore</text></g>
+        <g class="mini-timeline"><text x="31" y="402">THE SCHEDULE</text><rect x="30" y="417" width="120" height="18" rx="3"/><rect x="156" y="417" width="72" height="18" rx="3"/><rect x="234" y="417" width="180" height="18" rx="3"/><rect x="420" y="417" width="150" height="18" rx="3"/><line class="hero-playhead" x1="30" x2="30" y1="409" y2="446"/></g>
+      </svg>
+      <div class="art-caption"><span>PRIORITY</span><span>TIME</span><span>SYNCHRONIZATION</span></div>
     </div>
-
-    <section class="card">
-      <h2>Tasks</h2>
-      <div class="scroll"><table id="tasks"></table></div>
-    </section>
-
-    <section class="card">
-      <h2>Final outcomes <small>(whole run, at the horizon)</small></h2>
-      <div class="scroll"><table id="jobs"></table></div>
-    </section>
-
-    <section class="card">
-      <h2>Metrics <small>(computed by C++, shown as exported)</small></h2>
-      <p id="noMetrics" class="note" hidden>The engine exported no metrics for this run, so none are shown.</p>
-      <dl id="overall" class="meta"></dl>
-      <div class="scroll"><table id="perTask"></table></div>
-    </section>
+    <footer class="team-strip"><span class="eyebrow">BUILT BY TEAM B6</span><ul><li>Moataz</li><li>Youssef Gohar</li><li>Marc</li><li>Sarofem</li><li>Bavly</li></ul><p>C++ engine · Recorded run playback</p></footer>
   </main>
-
+  <main id="view" hidden>
+    <header class="scenario-header">
+      <div><p class="eyebrow">EXPLORE THE SCHEDULE</p><h1 id="runTitle" tabindex="-1"></h1><p id="runDescription" class="scenario-description"></p></div>
+      <dl id="runMeta" class="run-meta"></dl>
+    </header>
+    <div id="fixtureBanner" class="fixture" hidden>SAMPLE DATA · Hand-written design fixture, not an engine run.</div>
+    <div id="runNotes" role="status" hidden></div>
+    <div class="workspace">
+      <aside class="side-panel live-panel" aria-label="Current CPU and queues">
+        <div class="panel-title"><h2>At this tick</h2><span class="tickNow"></span></div>
+        <div class="cpu-card"><p class="eyebrow">ON THE CPU</p><strong id="running">—</strong><span id="cpuStatus" class="muted"></span></div>
+        <div id="queues"></div>
+        <section class="resource-section"><h3>Shared resources</h3><div id="resources"></div></section>
+      </aside>
+      <section class="timeline-panel" aria-labelledby="chartTitle">
+        <div class="chart-heading"><div><p class="eyebrow">THE CPU TIMELINE</p><h2 id="chartTitle">Gantt chart</h2></div><button id="focusChart" class="subtle" aria-pressed="false">Focus chart</button></div>
+        <p class="chart-hint">Each bar shows when a job uses the CPU. Select a lane to inspect it.</p>
+        <div class="chart-scroll" tabindex="0" aria-label="Scrollable job timeline"><svg id="gantt" role="group" aria-label="Recorded CPU intervals per job"></svg></div>
+        <div class="legend"><span><i class="sw rel"></i>Release</span><span><i class="sw dl"></i>Deadline</span><span><i class="sw bst"></i>Inherited priority</span><span><i class="missKey">×</i>Missed deadline</span></div>
+        <div class="transport">
+          <div class="scrubber"><output id="tickLabel" for="slider"></output><span class="muted">TICKS</span></div>
+          <input type="range" id="slider" min="0" max="0" value="0" step="1" aria-label="Selected tick">
+          <div class="controls"><button type="button" id="reset" class="subtle">Reset</button><button type="button" id="prev" class="subtle" aria-label="Previous tick">Prev</button><button type="button" id="play" class="primary">Play</button><button type="button" id="next" class="subtle" aria-label="Next tick">Next</button><label class="speed">Speed<select id="speed" aria-label="Playback speed"><option value="0.5">0.5×</option><option value="1" selected>1×</option><option value="2">2×</option><option value="4">4×</option></select></label></div>
+        </div>
+        <p id="tickStory" class="tick-story" aria-live="off"></p>
+        <p id="noSnapshot" class="fixture" hidden>No snapshot recorded at this tick. Job and resource states are unavailable.</p>
+      </section>
+      <aside class="side-panel inspector-panel" aria-label="Selected job">
+        <div class="panel-title"><h2>Inside the job</h2></div>
+        <label class="sr-only" for="jobSelect">Job to inspect</label><select id="jobSelect"></select>
+        <div id="jobState" class="state-badge"></div>
+        <div id="priorityCard" class="priority-card"><span id="priorityLabel">EFFECTIVE PRIORITY</span><strong id="priorityValue">—</strong><p id="priorityNote"></p></div>
+        <dl id="inspector" class="inspector"></dl>
+      </aside>
+    </div>
+    <footer class="viewer-footer"><span>Full recorded timeline · Side panels show the selected tick.</span><span>Local playback of C++ output · No simulation in the browser</span></footer>
+  </main>
   <script src="app.js"></script>
+  <script src="presentation.js"></script>
 </body>
 </html>

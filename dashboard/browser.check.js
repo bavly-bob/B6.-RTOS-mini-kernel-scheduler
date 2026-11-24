@@ -98,10 +98,21 @@ async function main() {
       clip: { x: 0, y: 0, width: cssContentSize.width, height: cssContentSize.height, scale: 1 } });
     fs.writeFileSync(path.join(shots, `${name}.png`), Buffer.from(data, "base64"));
   };
-  const inspector = async (label) => js(`[...document.querySelectorAll("#inspector > div")].find((d) => d.children[0].textContent === ${JSON.stringify(label)})?.children[1].textContent ?? null`);
-  const expect = async (label, value) => assert.strictEqual(await inspector(label), value, `inspector ${label}`);
+  const inspector = async (label) => js("[...document.querySelectorAll('#inspector > div')].find((d) => d.children[0].textContent === " + JSON.stringify(label) + ")?.children[1].textContent ?? null");
+  const expect = async (label, value) => assert.strictEqual(await inspector(label), value, "inspector " + label);
+  const state = async (value) => assert.strictEqual(await text("jobState"), value);
+  const noOverflow = async () => assert(await js("document.documentElement.scrollWidth <= innerWidth"), "page must fit viewport");
+  const cursorX = () => js("Number(document.querySelector('#gantt .cursor').getAttribute('x1'))");
+  await js("document.fonts.ready");
+  await pause(1100);
+  assert.strictEqual(await js("document.getElementById('welcome').hidden"), false);
+  assert.strictEqual(await js("document.getElementById('view').hidden"), true);
+  for (const name of ["Moataz", "Youssef Gohar", "Marc", "Sarofem", "Bavly"])
+    assert((await text("welcome")).includes(name));
+  await noOverflow();
+  await shot("welcome-desktop");
 
-  // Wrong files: each is refused with its name and reason, and nothing is shown.
+  // Rejected files do not replace the welcome screen or an existing valid recording.
   const bad = readRun(runPath("priority_inversion-fixed_priority-heap"));
   const broken = (name, change) => {
     const run = structuredClone(bad);
@@ -119,155 +130,189 @@ async function main() {
   const errors = await text("errors");
   for (const part of ["notes.json", "not valid JSON", "future.json", "schemaVersion is 2", "overlap.json", "overlaps",
     "two-running.json", "more than one RUNNING", "null-row.json", "jobs[0] must be an object", "huge.json", "32 MiB"])
-    assert(errors.includes(part), `error message lacks "${part}":\n${errors}`);
-  assert.strictEqual(await js(`document.getElementById("view").hidden`), true);
+    assert(errors.includes(part), "error message lacks " + part);
+  assert.strictEqual(await js("document.getElementById('view').hidden"), true);
   await shot("rejected-files");
 
-  // A real inversion run next to a rejected file: the good one is still imported.
   const inversion = runPath("priority_inversion-fixed_priority-heap");
   await importFiles([inversion, tempFile("notes.json", "{")]);
   assert((await text("errors")).includes("notes.json"));
   await importFiles([inversion]);
   assert.strictEqual(await text("errors"), "");
-  assert.strictEqual(await js(`document.getElementById("fixtureBanner").hidden`), true);
-  assert.match(await text("runMeta"), /engine_run/);
+  assert.strictEqual(await js("document.getElementById('fixtureBanner').hidden"), true);
+  assert.strictEqual(await js("document.getElementById('welcome').hidden"), true);
+  assert.match(await text("runMeta"), /Fixed priority/);
+  assert.match(await text("runTitle"), /Priority inversion/);
+  assert.match(await text("runDescription"), /M delays/);
+  assert.strictEqual(await js("document.querySelectorAll('#states,#tasks,#jobs,#overall,#perTask,#events,#keyEvents').length"), 0);
 
-  // Slider: historical state, not the final state (H ends COMPLETED with a miss).
+  // Historical job and resource state must not leak the final outcome.
   await pickJob(2);
-  await expect("State", "not released yet (releases at 1)");
+  await state("not released yet (releases at 1)");
+  assert.strictEqual(await text("priorityValue"), "—");
   await goTo(4);
-  await expect("State", "BLOCKED");
+  await state("BLOCKED");
   await expect("Waiting for", "mutex 0, owned by L · job 1");
   await expect("Deadline missed", "no, not by this tick");
-  assert.match(await text("resources"), /mutex 0\s+owner L · job 1\s+H · job 2/);
+  assert.match(await text("resources"), /mutex 0\s+owner L · job 1\s+Waiting: H · job 2/);
   await goTo(6);
   await expect("Deadline missed", "yes");
-  assert.strictEqual(await js(`(() => { const list = document.getElementById("events").getBoundingClientRect();
-    return [...document.querySelectorAll("#events .now")].every((b) => b.getBoundingClientRect().bottom <= list.bottom + 1); })()`), true, "this tick's events are visible");
+  assert.match(await text("tickStory"), /misses its deadline/);
 
-  // Buttons.
   await click("next");
   assert.strictEqual(await text("tickLabel"), "tick 7 of 10");
-  await click("prev");
-  await click("prev");
+  await click("prev"); await click("prev");
   assert.strictEqual(await text("tickLabel"), "tick 5 of 10");
   await click("reset");
+  assert.strictEqual(await js("document.getElementById('prev').disabled"), true);
+
+  // A cursor moves between ticks without inventing intermediate state.
+  await js("document.getElementById('speed').value = '0.5'");
+  const initialX = await cursorX();
+  await click("play"); await pause(180);
+  const firstX = await cursorX();
+  await pause(180);
+  const secondX = await cursorX();
+  assert(firstX > initialX && secondX > firstX, "cursor must move smoothly inside one tick");
   assert.strictEqual(await text("tickLabel"), "tick 0 of 10");
-  assert.strictEqual(await js(`document.getElementById("prev").disabled`), true);
+  await state("not released yet (releases at 1)");
   await click("play");
-  await until(`document.getElementById("slider").value >= 2`, "playback to advance");
+  const stoppedX = await cursorX(), stoppedTick = await text("tickLabel");
+  await pause(350);
+  assert.strictEqual(await cursorX(), stoppedX);
+  assert.strictEqual(await text("tickLabel"), stoppedTick);
+  await js("document.getElementById('speed').value = '4'");
+  await goTo(9); await click("play");
+  await until("document.getElementById('slider').value === '10' && document.getElementById('play').textContent === 'Play'", "end of recording");
+  assert.strictEqual(await js("document.getElementById('next').disabled"), true);
   await click("play");
-  const stopped = await text("tickLabel");
-  await pause(900);
-  assert.strictEqual(await text("tickLabel"), stopped, "pause must stop playback");
-  await goTo(9);
+  await until("Number(document.getElementById('slider').value) < 10", "replay from start");
   await click("play");
-  await until(`document.getElementById("slider").value === "10" && document.getElementById("play").textContent === "Play"`, "playback to stop at the horizon");
-  assert.strictEqual(await js(`document.getElementById("next").disabled`), true);
 
-  // Selecting an event jumps to its tick and job.
-  await js(`[...document.querySelectorAll("#events .event")].find((b) => b.innerText.includes("UNLOCK")).click()`);
-  assert.match(await text("tickLabel"), /^tick 8 of 10/);
+  // Home preserves imported runs, chosen job and tick.
+  await goTo(4);
+  await click("home");
+  assert.strictEqual(await js("document.getElementById('view').hidden"), true);
+  await click("returnToRun");
+  assert.strictEqual(await text("tickLabel"), "tick 4 of 10");
+  await state("BLOCKED");
+  await click("focusChart");
+  assert.strictEqual(await js("getComputedStyle(document.querySelector('.live-panel')).display"), "none");
+  await click("focusChart");
+  assert.notStrictEqual(await js("getComputedStyle(document.querySelector('.live-panel')).display"), "none");
+  await js("document.querySelector('#gantt .lane-pick[data-job=\"1\"]').dispatchEvent(new KeyboardEvent('keydown', {key:'Enter',bubbles:true}))");
+  assert.strictEqual(await js("document.getElementById('jobSelect').value"), "1");
 
-  // Idle time, suspension and an unfinished job.
+  // Suspension and EDF keep their exact recorded state and display the correct urgency.
   await importFiles([runPath("suspend_resume-fixed_priority-heap"), runPath("rm_edf_compare-edf-heap")]);
-  assert.match(await text("runMeta"), /edf/);
-  await goTo(8);
-  await pickJob(4);
-  await expect("State", "READY");
-  assert.match(await text("jobs"), /not completed\s+not completed/);
-  const count = await js(`document.getElementById("runSelect").options.length`);
-  await pickRun(count - 2);
-  await goTo(5);
-  await pickJob(1);
-  await expect("State", "SUSPENDED");
-  await expect("Waiting for", "nothing");
+  assert.match(await text("runMeta"), /EDF/);
+  await goTo(8); await pickJob(4); await state("READY");
+  assert.strictEqual(await text("priorityLabel"), "ABSOLUTE DEADLINE");
+  const count = await js("document.getElementById('runSelect').options.length");
+  await pickRun(count - 2); await goTo(5); await pickJob(1);
+  await state("SUSPENDED"); await expect("Waiting for", "nothing");
   await goTo(6);
-  assert.match(await text("queues"), /Running\s+idle/);
+  assert.strictEqual(await text("running"), "Idle");
 
-  // Inversion OFF and ON in the same viewer: switching keeps the tick and job.
-  await importFiles([inversion]);
-  await goTo(3);
-  await pickJob(1);
-  await expect("Effective priority", "1");
-  assert.match(await text("keyEvents"), /t=6\s+DEADLINE_MISS\s+H · job 2/);
+  // Real engine OFF/ON runs keep the tick and selection for a direct comparison.
+  await importFiles([inversion]); await goTo(3); await pickJob(1);
+  assert.strictEqual(await text("priorityValue"), "1");
   assert.strictEqual(await js("document.querySelectorAll('#gantt .miss').length"), 1);
   assert.strictEqual(await js("document.querySelectorAll('#gantt rect.boosted').length"), 0);
-  assert.strictEqual(await js(`document.getElementById("noMetrics").hidden`), true);
-  assert.match(await text("overall"), /90% \(9 of 10 ticks\)/);
-  assert.match(await text("overall"), /not applicable: one-shot tasks/);
-  // A run without metrics says so instead of showing empty tables.
+  await importFiles([runPath("priority_inversion-fixed_priority-heap-inheritance")]);
+  assert.strictEqual(await text("tickLabel"), "tick 3 of 10");
+  assert.strictEqual(await js("document.getElementById('jobSelect').value"), "1");
+  assert.strictEqual(await text("priorityValue"), "3");
+  assert.match(await text("priorityNote"), /Inherited from a waiter/);
+  assert.strictEqual(await js("document.querySelectorAll('#gantt rect.boosted').length"), 1);
+  assert.strictEqual(await js("document.querySelectorAll('#gantt .miss').length"), 0);
+  assert.strictEqual(await js("document.getElementById('fixtureBanner').hidden"), true);
+  await shot("inheritance-on-t3");
+  await goTo(4);
+  assert.strictEqual(await text("priorityValue"), "1");
+  await pickJob(2); await goTo(5); await state("COMPLETED");
+  await importFiles([inversion]);
+  await state("BLOCKED");
+  await goTo(9); await state("COMPLETED");
+
+  // Missing metrics and invalid recordings retain their exported warnings.
   await importFiles([broken("no_metrics.json", (r) => {
     r.metrics = { overall: {}, perTask: [] };
     r.validation.warnings = ["metrics were not computed for this run"];
   })]);
-  assert.strictEqual(await js(`document.getElementById("noMetrics").hidden`), false);
   assert.match(await text("runNotes"), /metrics were not computed/);
-  await importFiles([inversion]);
-  await importFiles([path.join(__dirname, "fixtures", "inversion_on.design.json")]);
-  assert.strictEqual(await text("tickLabel"), "tick 3 of 10");
-  await expect("Job", "L · job 1");
-  await expect("Effective priority", "3 (boosted from 1)");
-  assert.strictEqual(await js("document.querySelectorAll('#gantt rect.boosted').length"), 1);
-  assert.strictEqual(await js("document.querySelectorAll('#gantt .miss').length"), 0);
-  assert.strictEqual(await js(`document.getElementById("runNotes").hidden`), true);
-  assert.match(await text("overall"), /90% \(9 of 10 ticks\)/);
-  assert.match(await text("fixtureBanner"), /SAMPLE DATA/);
-  await js(`[...document.querySelectorAll("#keyEvents .event")][1].click()`);
-  assert.strictEqual(await text("tickLabel"), "tick 4 of 10");
-
-  // Key events fall back to a sentence, and an invalid run is marked as such.
-  await importFiles([runPath("rm_edf_compare-edf-heap")]);
-  assert.match(await text("keyEvents"), /No priority change, deadline miss or error/);
   await importFiles([broken("invalid.json", (r) => { r.validation.status = "invalid"; r.validation.error = "stopped early"; })]);
   assert.match(await text("runNotes"), /INVALID RUN, do not use as evidence: stopped early/);
-  assert.strictEqual(await js(`document.getElementById("runNotes").className`), "notes invalid");
+  assert.strictEqual(await js("document.getElementById('runNotes').className"), "notes invalid");
 
-  // Hostile names are shown as text and never run.
-  const hostile = broken("hostile.json", (r) => { r.run.label = r.tasks[0].name = '<img src=x onerror="window.__hacked=1"><script>window.__hacked=1</script>'; });
-  await importFiles([hostile]);
-  assert((await text("tasks")).includes("<img src=x"));
+  // Names remain plain text in the title, selector, cards and SVG.
+  await importFiles([broken("hostile.json", (r) => {
+    r.run.scenarioId = "custom";
+    r.run.label = r.tasks[0].name = '<img src=x onerror="window.__hacked=1"><script>window.__hacked=1</script>';
+  })]);
+  assert((await text("runTitle")).includes("<img src=x"));
   assert.strictEqual(await js("document.querySelectorAll('main img, main script').length"), 0);
   assert.strictEqual(await js("window.__hacked ?? null"), null);
 
-  // The hand-written sample is labelled, and a missing snapshot is stated.
-  await importFiles([path.join(__dirname, "fixtures", "rr_preemption.design.json")]);
+  await importFiles([path.join(__dirname, "fixtures", "inversion_on.design.json")]);
   assert.match(await text("fixtureBanner"), /SAMPLE DATA/);
-  assert.strictEqual(await js(`document.getElementById("noSnapshot").hidden`), false);
+  await importFiles([path.join(__dirname, "fixtures", "rr_preemption.design.json")]);
+  assert.strictEqual(await js("document.getElementById('noSnapshot').hidden"), false);
+  assert.strictEqual(await text("running"), "Unavailable");
 
-  // A 140-tick run fits its card; a 2,000-tick one scrolls with its lane labels kept in view.
+  // Long recordings scroll horizontally, with lane labels pinned beside the cursor.
   const chart = "document.getElementById('gantt')";
   await importFiles([runPath("sleep_order-fixed_priority-heap")]);
-  assert.strictEqual(await js(`${chart}.parentElement.scrollWidth <= ${chart}.parentElement.clientWidth`), true);
-  assert.match(await text("resources"), /none/);
+  assert.strictEqual(await js(chart + ".parentElement.scrollWidth <= " + chart + ".parentElement.clientWidth"), true);
+  assert.match(await text("resources"), /None/);
   const long = readRun(runPath("sleep_order-fixed_priority-heap"));
   long.config.horizonTicks = 2000;
-  await importFiles([tempFile("long.json", JSON.stringify(long))]);
-  await goTo(1900);
-  await until(`${chart}.parentElement.scrollLeft > 0`, "the chart to follow the cursor");
-  await until(`Math.abs(${chart}.querySelector("g.labels text").getBoundingClientRect().left - ${chart}.parentElement.getBoundingClientRect().left) < 20`, "lane labels to stay in view");
+  await importFiles([tempFile("long.json", JSON.stringify(long))]); await goTo(1900);
+  await until(chart + ".parentElement.scrollLeft > 0", "cursor following");
+  await until("Math.abs(" + chart + ".querySelector('g.labels text').getBoundingClientRect().left - " + chart + ".parentElement.getBoundingClientRect().left) < 20", "pinned lane labels");
 
-  // Imported settings are immutable: the first inversion run still shows its file's values.
+  // A zero-length, empty recording remains usable and cannot start playback.
+  await importFiles([broken("empty.json", (r) => {
+    for (const key of ["tasks", "jobs", "segments", "events", "snapshots"]) r[key] = [];
+    r.config.horizonTicks = 0; r.metrics = { overall: {}, perTask: [] };
+  })]);
+  assert.strictEqual(await js("document.getElementById('play').disabled"), true);
+  assert.strictEqual(await text("jobState"), "No jobs in this run");
+
+  // Preserve settings and test actual engine examples, including both timer backends.
   await pickRun(0);
-  for (const pair of [["Policy", bad.config.policy], ["Timer backend", bad.config.timerBackend], ["Inheritance", "off"],
-    ["Quantum (ticks)", bad.config.quantumTicks], ["Horizon (ticks)", bad.config.horizonTicks]])
-    assert((await text("runMeta")).replace(/\s+/g, " ").includes(pair.join(" ")), `run settings lack ${pair}`);
-
-  // Screenshots of real engine runs only, named <runId>-t<tick>.
-  if (shots) {
-    for (const [name, t, job] of [["rr_preemption-fixed_priority-heap", 2, 3], ["sleep_order-fixed_priority-heap", 115, 1],
-      ["suspend_resume-fixed_priority-heap", 5, 1], ["semaphore_signal-fixed_priority-heap", 1, 1],
-      ["priority_inversion-fixed_priority-heap", 6, 2], ["rm_edf_compare-fixed_priority-heap", 7, 2],
-      ["rm_edf_compare-edf-heap", 7, 2], ["overload-fixed_priority-heap", 10, 2]]) {
-      await importFiles([runPath(name)]);
-      await goTo(t);
-      await pickJob(job);
-      await shot(`${readRun(runPath(name)).run.runId}-t${t}`);
-    }
+  assert.match(await text("runMeta"), /Fixed priority\s+Timer\s+Min-heap\s+Inheritance\s+OFF/i);
+  for (const [name, t, job] of [["rr_preemption-fixed_priority-heap", 2, 3], ["sleep_order-fixed_priority-heap", 115, 1],
+    ["suspend_resume-fixed_priority-heap", 5, 1], ["semaphore_signal-fixed_priority-heap", 1, 1],
+    ["priority_inversion-fixed_priority-heap", 6, 2], ["rm_edf_compare-fixed_priority-heap", 7, 2],
+    ["rm_edf_compare-edf-heap", 7, 2], ["overload-fixed_priority-heap", 10, 2],
+    ["priority_inversion-fixed_priority-sorted_list-inheritance", 3, 1]]) {
+    await importFiles([runPath(name)]); await goTo(t); await pickJob(job);
+    await noOverflow(); await shot(name + "-t" + t);
   }
 
+  // Playback controls stay visible on a common presentation laptop viewport.
+  await send("Emulation.setDeviceMetricsOverride", { width: 1366, height: 768, deviceScaleFactor: 1, mobile: false });
+  await pause(150);
+  assert(await js("document.getElementById('play').getBoundingClientRect().bottom <= innerHeight"), "play button should be visible on a laptop");
+  await noOverflow(); await shot("viewer-laptop");
+
+  // Narrow screens and reduced-motion preferences remain usable.
+  await send("Emulation.setDeviceMetricsOverride", { width: 390, height: 844, deviceScaleFactor: 1, mobile: false });
+  await send("Emulation.setEmulatedMedia", { features: [{ name: "prefers-reduced-motion", value: "reduce" }] });
+  await pause(150); await noOverflow(); await shot("viewer-mobile");
+  await goTo(0);
+  await js("document.getElementById('speed').value = '0.5'");
+  const reducedX = await cursorX();
+  await click("play"); await pause(200);
+  assert.strictEqual(await cursorX(), reducedX, "reduced motion keeps cursor on whole ticks");
+  await click("play"); await click("home");
+  await noOverflow(); await shot("welcome-mobile");
+  assert.strictEqual(await js("getComputedStyle(document.querySelector('.orbit')).animationName"), "none");
+
+
   assert.deepStrictEqual(problems, [], "page errors");
-  assert(requests.length > 0 && requests.every((u) => u.startsWith("file:")), `non-local request: ${requests}`);
+  assert(requests.length > 0 && requests.every((u) => u.startsWith("file:") || u.startsWith("data:image/svg+xml,")), `non-local request: ${requests}`);
   console.log(`dashboard browser checks passed (offline, ${path.basename(browser)})`);
 }
 
