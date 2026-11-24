@@ -1,8 +1,8 @@
 # Results: golden traces, run metrics and timer costs
 
 Marc's results package (plan pp. 15-16, 22, 26), prepared on 22 Nov 2026 from the
-commit that adds this file (run files from `4cb86e1`). Table 1 and the inheritance-on
-metrics row were rechecked at `60efef5`, when the scheduler started handling
+commit that adds this file (run files from `d21268b`). Table 1 and the inheritance-on
+metrics row were rechecked at `6d6583a`, when the scheduler started handling
 inheritance. The timer experiment is shared with Sarofem (timer manager owner);
 **Sarofem has not reviewed these tables yet.**
 

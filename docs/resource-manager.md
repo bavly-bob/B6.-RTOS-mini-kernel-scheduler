@@ -169,7 +169,7 @@ and reentrant hooks. Checks remain active in Release builds.
 Next is joint integration, not another scheduler implementation in this component:
 connect Youssef's production hooks and Sarofem's timers/export, then replay the
 oracles end to end. No production scheduler exists in the inspected main snapshot
-bacfb25. Test-adapter traces are not production JSON or GUI evidence. Tests check
+b9daae3. Test-adapter traces are not production JSON or GUI evidence. Tests check
 runtime guards against a timer-blocked record; actual expiry/resume behavior still
 requires the real scheduler and timer backends.
 See [Moataz's status and rehearsal notes](moataz-completion-status.md).

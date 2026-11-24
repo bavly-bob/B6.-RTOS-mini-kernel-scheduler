@@ -12,7 +12,7 @@ Everything needed for the demonstration, with no network. The real runs are in
 
 Screenshots in [`screenshots/`](screenshots) are named `<runId>-t<tick>` and are a
 fallback if a live import is not possible. All were taken from `engine_run` files
-exported at engine revision `b2b0837`.
+exported at engine revision `2bbe86b`.
 
 ## Suggested eight minutes (plan p.25)
 
@@ -62,7 +62,7 @@ cost, one mutex per job. Inside those limits, every run can be repeated and expl
 
 ## Known limits to state openly
 
-- None open. (`--inheritance on` is connected end to end since commit `60efef5`.)
+- None open. (`--inheritance on` is connected end to end since commit `6d6583a`.)
 
 When one of these lands, export the new run, replace the fixture step, run
 `node dashboard/browser.check.js demo/screenshots`, and update this list.

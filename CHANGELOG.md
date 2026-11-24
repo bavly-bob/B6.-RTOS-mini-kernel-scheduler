@@ -4,7 +4,7 @@ Changes to Bavly's work package (completion plan p.23: timing wheel, dashboard,
 import checks, scenario presentation, documentation assembly), newest phase last.
 Page numbers refer to the completion plan.
 
-## Baseline before these changes (main at ed29b62)
+## Baseline before these changes (main at 5e83d31)
 
 - Built with CMake, MinGW g++ 15.2, Debug: compiles without errors.
 - `ctest`: 9 of 11 pass. **`scheduler` and `scheduler_runs_dashboard_validation`
@@ -12,7 +12,7 @@ Page numbers refer to the completion plan.
   `ResourceManager` now accepts it, and `Scheduler` does not yet override
   `onPriorityChanged`. The second test fails because the first one stops before
   writing its run files. Nothing in this changelog touches those files.
-- Timing wheel: the repairs and regression tests from plan p.6 (commit eb6b85e)
+- Timing wheel: the repairs and regression tests from plan p.6 (commit 20c819b)
   were rechecked. The data-structure suite passes under AddressSanitizer and
   UndefinedBehaviorSanitizer (g++, Ubuntu on WSL). No wheel change was needed.
 
@@ -219,7 +219,7 @@ Page numbers refer to the completion plan.
 - Plan p.23 (21 Nov task): assemble the design document, README, demonstration steps
   and a clean demonstration folder, and lead product narration. Plan p.27 lists the
   package contents. The old README said priority inheritance was not implemented,
-  which stopped being true at resource level with commit cbebeac.
+  which stopped being true at resource level with commit cad54e9.
 
 **How it works**
 - `design.md` summarizes and links the component guides rather than repeating them;
